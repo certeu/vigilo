@@ -1,0 +1,11 @@
+# Rendered to $CODEX_HOME/config.toml by scripts/config_codex.sh.
+# Provider is any OpenAI-compatible endpoint (OpenAI, Azure Foundry, LiteLLM).
+model = "${CODEX_MEDIUM_MODEL}"
+model_provider = "vigilo"
+model_reasoning_effort = "${CODEX_REASONING_EFFORT}"
+
+[model_providers.vigilo]
+name = "Vigilo OpenAI-compatible"
+base_url = "${CODEX_BASE_URL}"
+env_key = "CODEX_API_KEY"
+wire_api = "${CODEX_WIRE_API}"

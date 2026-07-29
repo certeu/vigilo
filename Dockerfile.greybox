@@ -1,0 +1,188 @@
+# Vigilo Grey-Box Pipeline
+#
+# Multi-stage build for grey-box worker.
+# No baked-in target repository — grey-box operates externally via browser + API.
+# Includes security scanning tools (feroxbuster, nuclei, testssl.sh, nmap) and
+# graph-tool for SurrealDB attack graph management.
+#
+# Build with: make build-greybox
+
+# -- Stage 1: Builder --------------------------------------------------------
+FROM cgr.dev/chainguard/wolfi-base:latest AS builder
+
+RUN apk update && apk add --no-cache \
+    build-base git curl wget ca-certificates \
+    linux-headers \
+    go nodejs-22 npm \
+    python3 py3-pip \
+    bash unzip
+
+# Go tools: nuclei + projectdiscovery httpx + interactsh-client + dalfox
+ENV GOPATH=/go
+ENV PATH=$GOPATH/bin:/usr/local/go/bin:$PATH
+RUN mkdir -p $GOPATH/bin && \
+    go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.4.4 && \
+    go install -v github.com/projectdiscovery/httpx/cmd/httpx@v1.6.10 && \
+    go install -v github.com/projectdiscovery/interactsh/cmd/interactsh-client@v1.2.4 && \
+    go install -v github.com/hahwul/dalfox/v2@v2.12.0
+
+# Feroxbuster (pre-built binary — pinned version)
+ARG FEROXBUSTER_VERSION=2.11.0
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then RUST_ARCH="x86_64"; \
+    elif [ "$ARCH" = "aarch64" ]; then RUST_ARCH="aarch64"; \
+    else RUST_ARCH="x86_64"; fi && \
+    curl -fsSL "https://github.com/epi052/feroxbuster/releases/download/v${FEROXBUSTER_VERSION}/${RUST_ARCH}-linux-feroxbuster.zip" -o /tmp/ferox.zip && \
+    unzip -o /tmp/ferox.zip -d /usr/local/bin/ && \
+    chmod +x /usr/local/bin/feroxbuster && \
+    rm /tmp/ferox.zip
+
+# testssl.sh
+RUN git clone --depth 1 https://github.com/drwetter/testssl.sh.git /opt/testssl && \
+    chmod +x /opt/testssl/testssl.sh && \
+    ln -s /opt/testssl/testssl.sh /usr/local/bin/testssl
+
+# WhatWeb (Ruby-based technology fingerprinting) — pinned version
+ARG WHATWEB_VERSION=0.5.5
+RUN git clone --depth 1 --branch v${WHATWEB_VERSION} \
+        https://github.com/urbanadventurer/WhatWeb.git /opt/whatweb && \
+    chmod +x /opt/whatweb/whatweb
+
+# Python dependencies into an isolated venv
+WORKDIR /app
+COPY pyproject.toml .
+COPY src/ ./src/
+COPY scripts/ ./scripts/
+RUN python3 -m venv /app/venv && \
+    /app/venv/bin/pip install --no-cache-dir -e ".[greybox]"
+
+# commix (command injection scanner) — distributed only as a git checkout;
+# the PyPI 'commix' package is unrelated/abandoned. Clone the upstream repo
+# and expose a wrapper from the runtime stage.
+ARG COMMIX_REF=v4.0
+RUN git clone --depth 1 --branch ${COMMIX_REF} \
+        https://github.com/commixproject/commix.git /opt/commix && \
+    chmod +x /opt/commix/commix.py
+
+# jwt_tool (JWT crafting/cracking) — clone + install minimal deps into the venv
+ARG JWT_TOOL_REF=master
+RUN git clone --depth 1 --branch ${JWT_TOOL_REF} \
+        https://github.com/ticarpi/jwt_tool.git /opt/jwt_tool && \
+    /app/venv/bin/pip install --no-cache-dir \
+        termcolor pycryptodomex cryptography requests && \
+    chmod +x /opt/jwt_tool/jwt_tool.py
+
+# -- Stage 2: Runtime ---------------------------------------------------------
+FROM cgr.dev/chainguard/wolfi-base:latest
+
+USER root
+RUN apk update && apk add --no-cache \
+    git bash curl ca-certificates \
+    nmap openssl \
+    nodejs-22 npm \
+    python3 \
+    ruby \
+    # GNU coreutils — testssl.sh needs the real `dd` (busybox dd is unsupported)
+    coreutils \
+    # Chromium and dependencies for Playwright
+    chromium \
+    nss freetype harfbuzz \
+    libx11 libxcomposite libxdamage libxext libxfixes libxrandr \
+    mesa-gbm fontconfig
+
+# Claude Code and Playwright CLI.
+# --allow-scripts is REQUIRED: recent npm blocks global install scripts by
+# default, so claude-code's postinstall (native binary download) won't run
+# otherwise, leaving a stub that fails with "Exec format error".
+RUN npm install -g --allow-scripts=@anthropic-ai/claude-code \
+    @anthropic-ai/claude-code @playwright/cli@0.1.1
+RUN mkdir -p /tmp/.claude/skills && \
+    playwright-cli install --skills && \
+    cp -r .claude/skills/playwright-cli /tmp/.claude/skills/ && \
+    rm -rf .claude
+
+# Copy Go binaries from builder (nuclei + projectdiscovery httpx +
+# interactsh-client + dalfox)
+COPY --from=builder /go/bin/nuclei /usr/local/bin/
+COPY --from=builder /go/bin/httpx /usr/local/bin/
+COPY --from=builder /go/bin/interactsh-client /usr/local/bin/
+COPY --from=builder /go/bin/dalfox /usr/local/bin/
+
+# Copy feroxbuster from builder
+COPY --from=builder /usr/local/bin/feroxbuster /usr/local/bin/
+
+# commix (Python) — copy source tree from builder and expose as commix on PATH
+COPY --from=builder /opt/commix /opt/commix
+RUN printf '#!/bin/sh\nexec /app/venv/bin/python3 /opt/commix/commix.py "$@"\n' \
+        > /usr/local/bin/commix && \
+    chmod +x /usr/local/bin/commix
+
+# jwt_tool (Python) — copy source tree from builder and expose as jwt_tool on PATH
+COPY --from=builder /opt/jwt_tool /opt/jwt_tool
+RUN printf '#!/bin/sh\nexec /app/venv/bin/python3 /opt/jwt_tool/jwt_tool.py "$@"\n' \
+        > /usr/local/bin/jwt_tool && \
+    chmod +x /usr/local/bin/jwt_tool
+
+# Copy testssl.sh from builder
+COPY --from=builder /opt/testssl /opt/testssl
+RUN ln -s /opt/testssl/testssl.sh /usr/local/bin/testssl
+
+# Copy WhatWeb from builder + install its sole runtime gem (addressable is pure
+# Ruby; ipaddr/json are stdlib). Optional gems (mongo, mysql2, rchardet) are
+# commented out in the v0.5.5 Gemfile and not required for --aggression=1.
+COPY --from=builder /opt/whatweb /opt/whatweb
+RUN gem install --no-document addressable && \
+    ln -s /opt/whatweb/whatweb /usr/local/bin/whatweb
+
+# Copy Python venv from builder
+COPY --from=builder /app/venv /app/venv
+ENV PATH="/app/venv/bin:$PATH"
+
+WORKDIR /app
+
+# Copy application code — NO .target-repo for grey-box
+COPY src/ ./src/
+COPY prompts/ ./prompts/
+COPY scripts/ ./scripts/
+COPY pyproject.toml .
+
+# Install the package in editable mode (with greybox extras: surrealdb + httpx)
+RUN /app/venv/bin/pip install --no-cache-dir -e ".[greybox]"
+
+# Make CLI tools available on PATH
+RUN ln -sf /app/scripts/save_deliverable.py /usr/local/bin/save-deliverable && \
+    chmod +x /app/scripts/save_deliverable.py && \
+    ln -sf /app/scripts/generate_totp.py /usr/local/bin/generate-totp && \
+    chmod +x /app/scripts/generate_totp.py
+
+# System-level git config
+RUN git config --system user.email "agent@localhost" && \
+    git config --system user.name "Vigilo Agent" && \
+    git config --system --add safe.directory '*'
+
+# Non-root scanner user
+RUN addgroup -g 1001 scanner && \
+    adduser -u 1001 -G scanner -s /bin/bash -D scanner && \
+    mkdir -p /workspace && \
+    mkdir -p /tmp/.cache /tmp/.config /tmp/.npm && \
+    chmod 777 /app /workspace /tmp/.cache /tmp/.config /tmp/.npm && \
+    chown -R scanner:scanner /app /workspace /tmp/.claude /tmp/.cache /tmp/.config /tmp/.npm
+
+# Copy entrypoint for optional UID remapping
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+# Environment
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PLAYWRIGHT_MCP_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV CHROMIUM_FLAGS="--no-sandbox --disable-setuid-sandbox"
+ENV VIGILO_DOCKER=true
+ENV GREYBOX_MODE=true
+ENV HOME=/tmp
+ENV XDG_CACHE_HOME=/tmp/.cache
+ENV XDG_CONFIG_HOME=/tmp/.config
+ENV npm_config_cache=/tmp/.npm
+
+ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["python3", "-m", "src.greybox.temporal.worker"]
