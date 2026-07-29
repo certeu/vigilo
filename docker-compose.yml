@@ -1,0 +1,108 @@
+networks:
+  lab-net:
+    name: vigilo-net
+    driver: bridge
+
+services:
+  temporal:
+    image: temporalio/temporal:1.5.0
+    container_name: vigilo-temporal
+    command: ["server", "start-dev", "--db-filename", "/home/temporal/temporal.db", "--ip", "0.0.0.0"]
+    ports:
+      - "127.0.0.1:7233:7233"   # gRPC
+      - "127.0.0.1:8233:8233"   # Web UI (built-in)
+    volumes:
+      - temporal-data:/home/temporal
+    environment:
+      # CRITICAL on proxied VMs: Temporal's internal worker dials itself at
+      # 0.0.0.0:7233. If HTTP_PROXY is daemon-injected, that connection goes
+      # through Squid → 403 → nil SDK client → panic in scanner.go. Wipe them.
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+      - http_proxy=
+      - https_proxy=
+      - NO_PROXY=*
+      - no_proxy=*
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "localhost:7233"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks:
+      - lab-net
+
+  worker:
+    build:
+      context: .
+      args:
+        REPO_DIR: ${REPO_DIR:-.target-repo}
+    depends_on:
+      temporal:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - TEMPORAL_ADDRESS=temporal:7233
+      # Corporate proxy (DEV VM). NO_PROXY MUST include `temporal` so the
+      # worker → Temporal gRPC heartbeat does NOT get routed via the proxy.
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+      - NO_PROXY=${NO_PROXY:-temporal,localhost,127.0.0.1,0.0.0.0,host.docker.internal}
+      - TARGET_URL=${TARGET_URL:-}
+      - ANTHROPIC_SMALL_MODEL=${ANTHROPIC_SMALL_MODEL:-}
+      - ANTHROPIC_MEDIUM_MODEL=${ANTHROPIC_MEDIUM_MODEL:-}
+      - ANTHROPIC_LARGE_MODEL=${ANTHROPIC_LARGE_MODEL:-}
+      # Executor selection (claude default). Set VIGILO_EXECUTOR=codex in .env to
+      # use the baked-in Codex CLI; both CLIs live in the same image.
+      - VIGILO_EXECUTOR=${VIGILO_EXECUTOR:-}
+      # Codex backend — OpenAI-compatible endpoint (OpenAI / Azure Foundry / LiteLLM).
+      # OPENAI_* are accepted as fallbacks and mapped to CODEX_* by entrypoint.sh.
+      - CODEX_HOME=/tmp/.codex
+      - CODEX_BASE_URL=${CODEX_BASE_URL:-}
+      - CODEX_API_KEY=${CODEX_API_KEY:-}
+      - CODEX_WIRE_API=${CODEX_WIRE_API:-}
+      - CODEX_REASONING_EFFORT=${CODEX_REASONING_EFFORT:-}
+      - CODEX_SMALL_MODEL=${CODEX_SMALL_MODEL:-}
+      - CODEX_MEDIUM_MODEL=${CODEX_MEDIUM_MODEL:-}
+      - CODEX_LARGE_MODEL=${CODEX_LARGE_MODEL:-}
+      - CODEX_PRICE_INPUT_PER_MTOK=${CODEX_PRICE_INPUT_PER_MTOK:-}
+      - CODEX_PRICE_OUTPUT_PER_MTOK=${CODEX_PRICE_OUTPUT_PER_MTOK:-}
+      - CODEX_EXTRA_CA_CERT=${CODEX_EXTRA_CA_CERT:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_ENDPOINT=${OPENAI_ENDPOINT:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-}
+      - VIGILO_HOST_UID=${VIGILO_HOST_UID:-}
+      - VIGILO_HOST_GID=${VIGILO_HOST_GID:-}
+      # AWS Bedrock
+      - CLAUDE_CODE_USE_BEDROCK=${CLAUDE_CODE_USE_BEDROCK:-}
+      - AWS_REGION=${AWS_REGION:-}
+      - AWS_BEARER_TOKEN_BEDROCK=${AWS_BEARER_TOKEN_BEDROCK:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_PROFILE=${AWS_PROFILE:-}
+      # Azure Foundry
+      - CLAUDE_CODE_USE_FOUNDRY=${CLAUDE_CODE_USE_FOUNDRY:-}
+      - ANTHROPIC_FOUNDRY_RESOURCE=${ANTHROPIC_FOUNDRY_RESOURCE:-}
+      - ANTHROPIC_FOUNDRY_API_KEY=${ANTHROPIC_FOUNDRY_API_KEY:-}
+      # GitLab integration (push fix branches + MR creation)
+      - GITLAB_URL=${GITLAB_URL:-https://gitlab.example.com}
+      - GITLAB_TOKEN=${GITLAB_TOKEN:-}
+      - VIGILO_PUSH_BRANCHES=${VIGILO_PUSH_BRANCHES:-}
+      - GIT_PUSH_USER=${GIT_PUSH_USER:-oauth2}
+    shm_size: 2gb
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - lab-net
+    command: >
+      python3 -m src.temporal.worker
+      /repos/target
+      --task-queue vigilo-${SCAN_ID:-default}
+      ${CONFIG_ARGS:-}
+
+volumes:
+  temporal-data:

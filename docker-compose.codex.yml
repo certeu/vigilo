@@ -1,0 +1,33 @@
+# Override for the Codex executor — use with:
+#   docker compose -f docker-compose.greybox.yml -f docker-compose.codex.yml build worker
+#
+# Swaps the Dockerfile, sets VIGILO_EXECUTOR=codex, and passes the
+# OpenAI-compatible endpoint credentials + model tier overrides.
+# All other services (temporal, surrealdb, surrealist) are inherited.
+
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.codex
+    environment:
+      - VIGILO_EXECUTOR=codex
+      - CODEX_HOME=/tmp/.codex
+      # OpenAI-compatible endpoint (OpenAI, Azure Foundry, or LiteLLM)
+      - CODEX_BASE_URL=${CODEX_BASE_URL:-https://api.openai.com/v1}
+      - CODEX_API_KEY=${CODEX_API_KEY:-}
+      - CODEX_WIRE_API=${CODEX_WIRE_API:-responses}
+      - CODEX_REASONING_EFFORT=${CODEX_REASONING_EFFORT:-medium}
+      # Model tier overrides (deployment / model names)
+      - CODEX_SMALL_MODEL=${CODEX_SMALL_MODEL:-gpt-5-mini}
+      - CODEX_MEDIUM_MODEL=${CODEX_MEDIUM_MODEL:-gpt-5-codex}
+      - CODEX_LARGE_MODEL=${CODEX_LARGE_MODEL:-gpt-5-codex}
+      # Cost estimation (Codex emits no cost; USD per 1M tokens)
+      - CODEX_PRICE_INPUT_PER_MTOK=${CODEX_PRICE_INPUT_PER_MTOK:-}
+      - CODEX_PRICE_OUTPUT_PER_MTOK=${CODEX_PRICE_OUTPUT_PER_MTOK:-}
+      # Internal CA: mount the cert into the container and point one of these at it.
+      # CODEX_EXTRA_CA_CERT is installed into the system trust store for the Rust
+      # codex binary (falls back to NODE_EXTRA_CA_CERTS); NODE_* also cover node tools.
+      - CODEX_EXTRA_CA_CERT=${CODEX_EXTRA_CA_CERT:-}
+      - NODE_TLS_REJECT_UNAUTHORIZED=${NODE_TLS_REJECT_UNAUTHORIZED:-0}
+      - NODE_EXTRA_CA_CERTS=${NODE_EXTRA_CA_CERTS:-}

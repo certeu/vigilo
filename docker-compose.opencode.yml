@@ -1,0 +1,24 @@
+# Override for OpenCode executor — use with:
+#   docker compose -f docker-compose.greybox.yml -f docker-compose.opencode.yml build worker
+#
+# Swaps the Dockerfile, sets VIGILO_EXECUTOR=opencode, and passes
+# LiteLLM gateway credentials + model tier overrides.
+# All other services (temporal, surrealdb, surrealist) are inherited.
+
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.opencode
+    environment:
+      - VIGILO_EXECUTOR=opencode
+      # LiteLLM gateway
+      - LITELLM_BASE_URL=${LITELLM_BASE_URL:-}
+      - LITELLM_API_KEY=${LITELLM_API_KEY:-}
+      # Model tier overrides (LiteLLM aliases, e.g. qwen3.6, qwen3-397b)
+      - OPENCODE_SMALL_MODEL=${OPENCODE_SMALL_MODEL:-qwen3.6}
+      - OPENCODE_MEDIUM_MODEL=${OPENCODE_MEDIUM_MODEL:-qwen3.6}
+      - OPENCODE_LARGE_MODEL=${OPENCODE_LARGE_MODEL:-qwen3.6}
+      # Internal CA: mount cert via EXTRA_CA_CERT or disable TLS verification
+      - NODE_TLS_REJECT_UNAUTHORIZED=${NODE_TLS_REJECT_UNAUTHORIZED:-0}
+      - NODE_EXTRA_CA_CERTS=${NODE_EXTRA_CA_CERTS:-}

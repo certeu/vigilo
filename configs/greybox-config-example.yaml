@@ -1,0 +1,60 @@
+# Grey-box scan configuration — copy and customize
+target:
+  url: "https://target.example.com"
+  description: "E-commerce application with user and admin roles"
+
+scope:
+  rules_avoid:
+    - "Do not test payment processing endpoints"
+    - "Do not attempt denial of service"
+  rules_focus:
+    - "Focus on admin panel authorization"
+    - "Test checkout workflow for business logic flaws"
+
+# Active recon master switch. When false (default), the workflow drops
+# nmap and httpx_probe from the managed-scan dispatch even if they are
+# enabled below. Flip to true ONLY when the engagement scope authorises
+# port scanning and ALPN/H2 fingerprinting against the target host.
+active_recon_enabled: false
+
+managed_scans:
+  feroxbuster: true
+  nuclei: true
+  ssl_analysis: true
+  header_analysis: true
+  cors_check: true
+  default_creds: true
+  tech_fingerprint: true
+  robots_sitemap: true
+  # Active recon — only run when active_recon_enabled is also true.
+  nmap: false           # top-1000 TCP, -sT -sV (single-host service discovery)
+  httpx_probe: false    # ALPN / HTTP2 / JARM transport fingerprinting
+
+budget:
+  max_cost_usd: 50.00
+  max_duration_hours: 4
+
+guardrails:
+  max_concurrent_agents: 12
+  max_per_vuln_type: 3
+  lead_max_attempts: 3
+  claim_ttl_seconds: 300
+  max_scheduler_ticks: 100        # hard cap on reactive loop iterations
+  idle_ticks_before_done: 20      # stop if no new findings for N ticks
+  per_type_cap: 3                 # max PROBE_PARAMETERS / INVESTIGATE_LEAD verbs per tick
+  authz_per_tick_cap: 2           # max TEST_ACCESS_MATRIX verbs per tick
+  chain_per_tick_cap: 1           # max ATTEMPT_CHAIN verbs per tick
+  max_specialists_per_endpoint: 2 # C4: cap shape-driven specialists dispatched to a single endpoint
+  # C1: three-tier budget mode thresholds (fractions of remaining budget, 0.0-1.0).
+  # Below the ceiling the scheduler drops expensive verbs (PROBE_PARAMETERS, ATTEMPT_CHAIN);
+  # below the floor the scheduler halts with reason=budget_exhausted.
+  budget_cheap_ceiling_pct: 0.10  # cheap-only mode kicks in below this fraction
+  budget_cheap_floor_pct: 0.03    # exhausted mode kicks in below this fraction
+  # D4: per-parameter retry caps by verdict. Conclusive attempts always foreclose
+  # retries; inconclusive (WAF / 5xx / rate-limit) and failed (crash/kill) attempts
+  # retry up to these caps before the (param, vuln_type) pair is considered done.
+  max_inconclusive_retries: 2     # retries after verdict=inconclusive
+  max_failed_retries: 3           # retries after verdict=failed
+  # Phase 1 managed-scan orchestration (runs in parallel with discovery).
+  managed_scan_concurrency: 4     # max scanners running concurrently inside Phase 1
+  preflight_scan_deadline_s: 600  # wall-clock deadline (seconds) for the managed-scan bundle

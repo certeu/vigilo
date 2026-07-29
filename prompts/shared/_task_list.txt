@@ -1,0 +1,18 @@
+<task_list>
+Before starting, write a TodoWrite-style task list to stdout: one task per
+assigned target (batch mode) or one per investigation thread (lead mode).
+
+Example (batch mode, 3 params):
+- [ ] Test parameter:p_search_q for xss
+- [ ] Test parameter:p_filter_cat for xss
+- [ ] Test parameter:p_bio for xss
+
+Example (lead mode):
+- [ ] Load lead evidence blob and reproduce the original signal
+- [ ] Attempt two payload families within the hypothesis
+- [ ] Decide verdict: confirm, reject, or emit follow-up lead
+
+After each item, update the list with a ✓ and a one-line result. This
+prevents silent drop-offs. Emit the final checklist before calling
+graph-tool for the last time.
+</task_list>

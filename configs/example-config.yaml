@@ -1,0 +1,47 @@
+# Example configuration for authenticated security testing
+# Copy and customize: cp configs/example-config.yaml my-config.yaml
+
+# Optional: describe your target (max 500 chars)
+description: "Example web application for security testing"
+
+# Authentication configuration
+authentication:
+  login_type: form
+  login_url: "http://localhost:8080/login"
+  credentials:
+    username: "test@example.com"
+    password: "testpassword"
+    # totp_secret: "JBSWY3DPEHPK3PXP"  # Uncomment for 2FA
+
+  login_flow:
+    - "Type $username into the email field"
+    - "Type $password into the password field"
+    - "Click the 'Sign In' button"
+
+  success_condition:
+    type: url_contains
+    value: "/dashboard"
+
+# --- Alternative: pre-authenticated cookie (EU Login / external SSO) ---
+# Use this when the target requires 2FA that cannot be automated.
+# Log in via your browser, copy the Cookie header from DevTools, paste here.
+#
+# authentication:
+#   login_type: cookie
+#   login_url: "https://sso.example.com/myapp"
+#   cookie_header: "JSESSIONID=abc123; eu_login_token=xyz789"
+
+# Rules to guide analysis
+rules:
+  avoid:
+    - description: "Do not test logout functionality"
+      type: path
+      url_path: "/logout"
+    - description: "Do not test admin panel"
+      type: path
+      url_path: "/admin"
+
+  focus:
+    - description: "Focus on API endpoints"
+      type: path
+      url_path: "/api"

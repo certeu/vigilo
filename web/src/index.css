@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply bg-canvas text-ink;
+    font-family: theme("fontFamily.body");
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    @apply bg-canvas;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: theme("fontFamily.display");
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-surface border border-line rounded-lg shadow-card;
+  }
+  .btn-primary {
+    @apply inline-flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm
+      font-medium text-white hover:brightness-110 transition;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 rounded-md border border-line px-3 py-2
+      text-sm font-medium text-ink hover:bg-canvas transition;
+  }
+  .field {
+    @apply w-full rounded-md border border-line bg-surface px-3 py-2 text-sm
+      outline-none focus:border-accent focus:ring-2 focus:ring-accent/20;
+  }
+  .mono {
+    font-family: theme("fontFamily.mono");
+  }
+
+  /* Rendered markdown report */
+  .markdown {
+    @apply text-sm leading-relaxed text-ink;
+  }
+  .markdown h1 {
+    @apply mb-3 mt-6 text-2xl font-semibold;
+    font-family: theme("fontFamily.display");
+  }
+  .markdown h2 {
+    @apply mb-2 mt-6 border-b border-line pb-1 text-xl font-semibold;
+    font-family: theme("fontFamily.display");
+  }
+  .markdown h3 {
+    @apply mb-2 mt-4 text-base font-semibold;
+  }
+  .markdown p {
+    @apply my-3;
+  }
+  .markdown ul {
+    @apply my-3 list-disc pl-6;
+  }
+  .markdown ol {
+    @apply my-3 list-decimal pl-6;
+  }
+  .markdown li {
+    @apply my-1;
+  }
+  .markdown a {
+    @apply text-accent underline;
+  }
+  .markdown code {
+    @apply rounded bg-canvas px-1 py-0.5 text-[0.85em];
+    font-family: theme("fontFamily.mono");
+  }
+  .markdown pre {
+    @apply my-3 overflow-auto rounded-md border border-line bg-canvas p-3 text-xs;
+  }
+  .markdown pre code {
+    @apply bg-transparent p-0;
+  }
+  .markdown table {
+    @apply my-3 w-full border-collapse text-sm;
+  }
+  .markdown th,
+  .markdown td {
+    @apply border border-line px-3 py-1.5 text-left;
+  }
+  .markdown th {
+    @apply bg-canvas font-semibold;
+  }
+  .markdown blockquote {
+    @apply my-3 border-l-2 border-line pl-4 text-slate;
+  }
+}

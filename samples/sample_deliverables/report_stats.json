@@ -1,0 +1,1635 @@
+{
+  "version": "1.0",
+  "generated_at": "2026-07-09T17:43:45.817609+00:00",
+  "totals": {
+    "raw_findings": 92,
+    "unique_findings": 82,
+    "consolidated_count": 10
+  },
+  "severity_counts": {
+    "critical": 31,
+    "high": 32,
+    "medium": 16,
+    "low": 3,
+    "informational": 0
+  },
+  "status_counts": {
+    "exploited": 50,
+    "unconfirmed": 32
+  },
+  "category_counts": {
+    "auth": {
+      "critical": 3,
+      "high": 3,
+      "medium": 0,
+      "low": 0,
+      "informational": 0,
+      "total": 6
+    },
+    "authz": {
+      "critical": 17,
+      "high": 2,
+      "medium": 0,
+      "low": 0,
+      "informational": 0,
+      "total": 19
+    },
+    "injection": {
+      "critical": 6,
+      "high": 1,
+      "medium": 0,
+      "low": 0,
+      "informational": 0,
+      "total": 7
+    },
+    "supply_chain": {
+      "critical": 2,
+      "high": 13,
+      "medium": 12,
+      "low": 2,
+      "informational": 0,
+      "total": 29
+    },
+    "ssrf": {
+      "critical": 2,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "informational": 0,
+      "total": 2
+    },
+    "xss": {
+      "critical": 1,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "informational": 0,
+      "total": 1
+    },
+    "chain": {
+      "critical": 0,
+      "high": 7,
+      "medium": 0,
+      "low": 0,
+      "informational": 0,
+      "total": 7
+    },
+    "crypto": {
+      "critical": 0,
+      "high": 2,
+      "medium": 2,
+      "low": 1,
+      "informational": 0,
+      "total": 5
+    },
+    "websocket": {
+      "critical": 0,
+      "high": 4,
+      "medium": 2,
+      "low": 0,
+      "informational": 0,
+      "total": 6
+    }
+  },
+  "category_display_names": {
+    "injection": "Injection",
+    "xss": "Cross-Site Scripting (XSS)",
+    "auth": "Authentication",
+    "ssrf": "Server-Side Request Forgery (SSRF)",
+    "authz": "Authorization",
+    "graphql": "GraphQL",
+    "websocket": "WebSocket",
+    "crypto": "Cryptography",
+    "supply_chain": "Supply Chain (SCA)",
+    "integrity": "Code Integrity",
+    "chain": "Attack Chains"
+  },
+  "status_legend": [
+    {
+      "name": "Exploited",
+      "definition": "Vulnerability was successfully exercised end-to-end. The exploitation evidence file documents a working payload, a concrete server response, and (where applicable) a screenshot."
+    },
+    {
+      "name": "Potential",
+      "definition": "Source-to-sink data flow is fully traced and the absence of every relevant defence is verified, but live execution was not performed (e.g. because no live target was available, the environment was code-only, or the exploit requires an external dependency such as a malicious server)."
+    },
+    {
+      "name": "Unconfirmed (Analysis)",
+      "definition": "Identified by code analysis only. No exploit was attempted (typical of cryptographic findings — algorithm choice, key rotation policy, secret comparison method — which are classified by inspection rather than execution)."
+    },
+    {
+      "name": "Unconfirmed",
+      "definition": "Code pattern matches a known weakness but the necessary preconditions for exploitation could not be confirmed in this engagement."
+    }
+  ],
+  "canonical_findings": [
+    {
+      "canonical_id": "AUTH-VULN-02",
+      "title": "Authentication_Bypass — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "auth",
+      "secondary_categories": [],
+      "aliases": [
+        "AUTH-VULN-01"
+      ],
+      "fix_branch": null,
+      "vulnerability_type": "Authentication_Bypass",
+      "locations": [
+        "api/auth.py",
+        "api/auth.py:27",
+        "api/main.py",
+        "api/main.py:109",
+        "api/main.py:121",
+        "api/main.py:164",
+        "api/routers/ws_chat.py",
+        "api/routers/ws_chat.py:239",
+        "api/routers/ws_chat.py:57",
+        "auth.py",
+        "auth.py:27",
+        "main.py",
+        "main.py:109",
+        "main.py:121",
+        "main.py:164",
+        "ws_chat.py",
+        "ws_chat.py:239",
+        "ws_chat.py:57"
+      ]
+    },
+    {
+      "canonical_id": "AUTH-VULN-05",
+      "title": "Token_Management_Issue — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "auth",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Token_Management_Issue",
+      "locations": [
+        "api/auth.py",
+        "api/auth.py:51",
+        "auth-store.ts",
+        "auth-store.ts:211",
+        "auth-store.ts:83",
+        "auth.py",
+        "auth.py:51",
+        "client.ts",
+        "client.ts:26",
+        "frontend/src/lib/api/client.ts",
+        "frontend/src/lib/api/client.ts:26",
+        "frontend/src/lib/stores/auth-store.ts",
+        "frontend/src/lib/stores/auth-store.ts:211",
+        "frontend/src/lib/stores/auth-store.ts:83"
+      ]
+    },
+    {
+      "canonical_id": "AUTH-VULN-06",
+      "title": "Session_Management_Flaw — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "auth",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Session_Management_Flaw",
+      "locations": [
+        "api/auth.py",
+        "api/auth.py:27",
+        "auth-store.ts",
+        "auth-store.ts:142",
+        "auth.py",
+        "auth.py:27",
+        "frontend/src/lib/hooks/use-auth.ts",
+        "frontend/src/lib/hooks/use-auth.ts:56",
+        "frontend/src/lib/stores/auth-store.ts",
+        "frontend/src/lib/stores/auth-store.ts:142",
+        "use-auth.ts",
+        "use-auth.ts:56"
+      ]
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-01",
+      "title": "Vertical — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "authz",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Vertical",
+      "locations": [
+        "api/auth.py",
+        "api/auth.py:27",
+        "auth.py",
+        "auth.py:27"
+      ]
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-02",
+      "title": "Vertical — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "authz",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Vertical",
+      "locations": [
+        "api/routers/ws_chat.py",
+        "api/routers/ws_chat.py:57",
+        "ws_chat.py",
+        "ws_chat.py:57"
+      ]
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-04",
+      "title": "Horizontal — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "authz",
+      "secondary_categories": [],
+      "aliases": [
+        "AUTHZ-VULN-03"
+      ],
+      "fix_branch": null,
+      "vulnerability_type": "Horizontal",
+      "locations": [
+        "api/routers/workspaces.py",
+        "api/routers/workspaces.py:191",
+        "api/routers/workspaces.py:88",
+        "workspaces.py",
+        "workspaces.py:191",
+        "workspaces.py:88"
+      ]
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-07",
+      "title": "Horizontal — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "authz",
+      "secondary_categories": [],
+      "aliases": [
+        "AUTHZ-VULN-05",
+        "AUTHZ-VULN-06"
+      ],
+      "fix_branch": null,
+      "vulnerability_type": "Horizontal",
+      "locations": [
+        "api/routers/sources.py",
+        "api/routers/sources.py:601",
+        "api/routers/sources.py:674",
+        "api/routers/sources.py:796",
+        "sources.py",
+        "sources.py:601",
+        "sources.py:674",
+        "sources.py:796",
+        "sources.py:821"
+      ]
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-08",
+      "title": "Horizontal — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "authz",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Horizontal",
+      "locations": [
+        "api/routers/notes.py",
+        "api/routers/notes.py:111",
+        "notes.py",
+        "notes.py:111"
+      ]
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-10",
+      "title": "Horizontal — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "authz",
+      "secondary_categories": [],
+      "aliases": [
+        "AUTHZ-VULN-09"
+      ],
+      "fix_branch": null,
+      "vulnerability_type": "Horizontal",
+      "locations": [
+        "api/routers/chat.py",
+        "api/routers/chat.py:601",
+        "api/routers/chat.py:817",
+        "chat.py",
+        "chat.py:601",
+        "chat.py:817"
+      ]
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-11",
+      "title": "Horizontal — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "authz",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Horizontal",
+      "locations": [
+        "api/routers/ws_chat.py",
+        "api/routers/ws_chat.py:380",
+        "ws_chat.py",
+        "ws_chat.py:380"
+      ]
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-13",
+      "title": "Horizontal — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "authz",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Horizontal",
+      "locations": [
+        "api/routers/studio.py",
+        "api/routers/studio.py:65",
+        "studio.py",
+        "studio.py:65"
+      ]
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-14",
+      "title": "Context_Workflow — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "authz",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Context_Workflow",
+      "locations": [
+        "api/routers/studio.py",
+        "api/routers/studio.py:136",
+        "studio.py",
+        "studio.py:136"
+      ]
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-15",
+      "title": "Horizontal — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "authz",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Horizontal",
+      "locations": [
+        "api/routers/media jobs.py",
+        "api/routers/media jobs.py:139",
+        "media jobs.py",
+        "media jobs.py:139"
+      ]
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-16",
+      "title": "Horizontal — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "authz",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Horizontal",
+      "locations": [
+        "api/routers/diagrams.py",
+        "api/routers/diagrams.py:74",
+        "diagrams.py",
+        "diagrams.py:74"
+      ]
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-17",
+      "title": "Horizontal — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "authz",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Horizontal",
+      "locations": [
+        "api/routers/insights.py",
+        "api/routers/insights.py:11",
+        "insights.py",
+        "insights.py:11"
+      ]
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-18",
+      "title": "Vertical — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "authz",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Vertical",
+      "locations": [
+        "api/routers/episode_profiles.py",
+        "api/routers/episode_profiles.py:101",
+        "episode_profiles.py",
+        "episode_profiles.py:101"
+      ]
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-19",
+      "title": "Vertical — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "authz",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Vertical",
+      "locations": [
+        "api/routers/commands.py",
+        "api/routers/commands.py:37",
+        "commands.py",
+        "commands.py:37"
+      ]
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-20",
+      "title": "Vertical — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "authz",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Vertical",
+      "locations": [
+        "api/routers/models.py",
+        "api/routers/models.py:89",
+        "models.py",
+        "models.py:89"
+      ]
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-21",
+      "title": "Vertical — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "authz",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Vertical",
+      "locations": [
+        "api/routers/embedding_rebuild.py",
+        "api/routers/embedding_rebuild.py:18",
+        "embedding_rebuild.py",
+        "embedding_rebuild.py:18"
+      ]
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-22",
+      "title": "Context_Workflow — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "authz",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Context_Workflow",
+      "locations": [
+        "api/routers/transformations.py",
+        "api/routers/transformations.py:49",
+        "transformations.py",
+        "transformations.py:49"
+      ]
+    },
+    {
+      "canonical_id": "INJ-VULN-01",
+      "title": "SQLi — api/routers/workspaces.py:30 repo_query(query), raw NoSQL executed by webapp/database/repository.py:362 connection.query(qu",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "injection",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "SQLi",
+      "locations": [
+        "api/routers/workspaces.py",
+        "api/routers/workspaces.py:17",
+        "api/routers/workspaces.py:22",
+        "api/routers/workspaces.py:30",
+        "api/routers/workspaces.py:53",
+        "workspaces.py",
+        "workspaces.py:17",
+        "workspaces.py:22",
+        "workspaces.py:30",
+        "workspaces.py:53",
+        "webapp/database/repository.py",
+        "webapp/database/repository.py:362",
+        "repository.py",
+        "repository.py:362"
+      ]
+    },
+    {
+      "canonical_id": "INJ-VULN-03",
+      "title": "LFI — webapp/graphs/source.py:134 Path(file_path).read_text(...), and webapp/graphs/source.py:159 extract_content(content_stat",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "injection",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "LFI",
+      "locations": [
+        "api/models.py",
+        "api/models.py:295",
+        "api/routers/sources.py",
+        "api/routers/sources.py:324",
+        "models.py",
+        "models.py:295",
+        "webapp/graphs/source.py",
+        "webapp/graphs/source.py:122",
+        "webapp/graphs/source.py:134",
+        "webapp/graphs/source.py:159",
+        "source.py",
+        "source.py:122",
+        "source.py:134",
+        "source.py:159",
+        "sources.py",
+        "sources.py:324"
+      ]
+    },
+    {
+      "canonical_id": "INJ-VULN-04",
+      "title": "PathTraversal — webapp/domain/workspace.py:428 os.unlink(file_path).",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "injection",
+      "secondary_categories": [],
+      "aliases": [
+        "INJ-VULN-02"
+      ],
+      "fix_branch": null,
+      "vulnerability_type": "PathTraversal",
+      "locations": [
+        "api/routers/sources.py",
+        "api/routers/sources.py:324",
+        "api/routers/sources.py:52",
+        "api/routers/sources.py:56",
+        "api/routers/sources.py:72",
+        "api/routers/sources.py:922",
+        "api/routers/sources.py:97",
+        "workspace.py",
+        "workspace.py:425",
+        "workspace.py:428",
+        "webapp/domain/workspace.py",
+        "webapp/domain/workspace.py:425",
+        "webapp/domain/workspace.py:428",
+        "sources.py",
+        "sources.py:324",
+        "sources.py:52",
+        "sources.py:56",
+        "sources.py:72",
+        "sources.py:922",
+        "sources.py:97"
+      ]
+    },
+    {
+      "canonical_id": "INJ-VULN-05",
+      "title": "LFI — webapp/providers/anthropic_chat.py:1171 open(fpath, 'rb').",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "injection",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "LFI",
+      "locations": [
+        "anthropic_chat.py",
+        "anthropic_chat.py:1171",
+        "api/ws/stream.py",
+        "webapp/providers/anthropic_chat.py",
+        "webapp/providers/anthropic_chat.py:1171",
+        "stream.py"
+      ]
+    },
+    {
+      "canonical_id": "INJ-VULN-06",
+      "title": "PathTraversal — commands/media job_commands.py:185 output_dir path construction; commands/media job_commands.py:186 output_dir.mkdir(); commands",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "injection",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "PathTraversal",
+      "locations": [
+        "api/media job_service.py",
+        "api/media job_service.py:17",
+        "commands/media job_commands.py",
+        "commands/media job_commands.py:185",
+        "commands/media job_commands.py:186",
+        "commands/media job_commands.py:193",
+        "media job_commands.py",
+        "media job_commands.py:185",
+        "media job_commands.py:186",
+        "media job_commands.py:193",
+        "media job_service.py",
+        "media job_service.py:17"
+      ]
+    },
+    {
+      "canonical_id": "INJ-VULN-08",
+      "title": "CommandInjection — webapp/providers/anthropic_skills.py:293 ClaudeAgentOptions(permission_mode='bypassPermissions'); webapp/pr",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "injection",
+      "secondary_categories": [],
+      "aliases": [
+        "INJ-VULN-09"
+      ],
+      "fix_branch": null,
+      "vulnerability_type": "CommandInjection",
+      "locations": [
+        "anthropic_skills.py",
+        "anthropic_skills.py:293",
+        "anthropic_skills.py:297",
+        "anthropic_skills.py:305",
+        "api/models.py",
+        "api/models.py:443",
+        "api/models.py:447",
+        "api/studio_service.py",
+        "api/studio_service.py:399",
+        "api/studio_service.py:421",
+        "api/studio_service.py:465",
+        "models.py",
+        "models.py:443",
+        "models.py:447",
+        "webapp/providers/anthropic_skills.py",
+        "webapp/providers/anthropic_skills.py:293",
+        "webapp/providers/anthropic_skills.py:297",
+        "webapp/providers/anthropic_skills.py:305",
+        "webapp/providers/research_orchestrator.py",
+        "webapp/providers/research_orchestrator.py:458",
+        "webapp/providers/research_orchestrator.py:498",
+        "webapp/providers/research_orchestrator.py:516",
+        "research_orchestrator.py",
+        "research_orchestrator.py:458",
+        "research_orchestrator.py:498",
+        "research_orchestrator.py:516",
+        "studio_service.py",
+        "studio_service.py:399",
+        "studio_service.py:421",
+        "studio_service.py:465"
+      ]
+    },
+    {
+      "canonical_id": "SCA-VULN-001",
+      "title": "When Vitest UI server is listening, arbitrary file can be read and executed",
+      "severity": "critical",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-002",
+      "title": "When Vitest UI server is listening, arbitrary file can be read and executed",
+      "severity": "critical",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SSRF-VULN-03",
+      "title": "API_Proxy_Bypass — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "ssrf",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "API_Proxy_Bypass",
+      "locations": [
+        "api/command_service.py",
+        "api/command_service.py:27",
+        "api/routers/commands.py",
+        "api/routers/commands.py:55",
+        "command_service.py",
+        "command_service.py:27",
+        "commands.py",
+        "commands.py:55",
+        "commands/source_commands.py",
+        "commands/source_commands.py:102",
+        "content_core/processors/url.py",
+        "webapp/graphs/source.py",
+        "webapp/graphs/source.py:159",
+        "source.py",
+        "source.py:159",
+        "source_commands.py",
+        "source_commands.py:102",
+        "url.py"
+      ]
+    },
+    {
+      "canonical_id": "SSRF-VULN-04",
+      "title": "URL_Manipulation — unknown sink",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "ssrf",
+      "secondary_categories": [],
+      "aliases": [
+        "SSRF-VULN-01",
+        "SSRF-VULN-02"
+      ],
+      "fix_branch": null,
+      "vulnerability_type": "URL_Manipulation",
+      "locations": [
+        "api/models.py",
+        "api/models.py:283",
+        "api/routers/sources.py",
+        "api/routers/sources.py:310",
+        "api/routers/sources.py:554",
+        "api/routers/sources.py:830",
+        "api/routers/sources.py:86",
+        "api/routers/sources.py:866",
+        "commands/source_commands.py",
+        "commands/source_commands.py:102",
+        "content_core/processors/url.py",
+        "models.py",
+        "models.py:283",
+        "webapp/graphs/source.py",
+        "webapp/graphs/source.py:159",
+        "webapp/graphs/source.py:173",
+        "source.py",
+        "source.py:159",
+        "source.py:173",
+        "source_commands.py",
+        "source_commands.py:102",
+        "sources.py",
+        "sources.py:310",
+        "sources.py:554",
+        "sources.py:830",
+        "sources.py:86",
+        "sources.py:866",
+        "url.py"
+      ]
+    },
+    {
+      "canonical_id": "XSS-VULN-01",
+      "title": "Stored — POST body field: url on /api/sources or /api/sources/json for type=link",
+      "severity": "critical",
+      "status": "exploited",
+      "primary_category": "xss",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Stored",
+      "locations": [
+        "SourceDetailContent.tsx",
+        "SourceDetailContent.tsx:341",
+        "SourceDetailContent.tsx:501",
+        "api/models.py",
+        "api/models.py:294",
+        "api/routers/sources.py",
+        "api/routers/sources.py:310",
+        "api/routers/sources.py:555",
+        "api/routers/sources.py:631",
+        "frontend/src/components/source/SourceDetailContent.tsx",
+        "frontend/src/components/source/SourceDetailContent.tsx:341",
+        "frontend/src/components/source/SourceDetailContent.tsx:501",
+        "models.py",
+        "models.py:294",
+        "webapp/graphs/source.py",
+        "webapp/graphs/source.py:181",
+        "source.py",
+        "source.py:181",
+        "sources.py",
+        "sources.py:310",
+        "sources.py:555",
+        "sources.py:631"
+      ]
+    },
+    {
+      "canonical_id": "AUTH-VULN-04",
+      "title": "Abuse_Defenses_Missing — unknown sink",
+      "severity": "high",
+      "status": "exploited",
+      "primary_category": "auth",
+      "secondary_categories": [],
+      "aliases": [
+        "AUTH-VULN-03"
+      ],
+      "fix_branch": null,
+      "vulnerability_type": "Abuse_Defenses_Missing",
+      "locations": [
+        "api/auth.py",
+        "api/auth.py:41",
+        "api/main.py",
+        "api/main.py:117",
+        "api/routers/auth.py",
+        "api/routers/auth.py:57",
+        "auth-store.ts",
+        "auth-store.ts:77",
+        "auth.py",
+        "auth.py:41",
+        "auth.py:57",
+        "frontend/src/lib/stores/auth-store.ts",
+        "frontend/src/lib/stores/auth-store.ts:77",
+        "main.py",
+        "main.py:117"
+      ]
+    },
+    {
+      "canonical_id": "AUTH-VULN-07",
+      "title": "Token_Management_Issue — unknown sink",
+      "severity": "high",
+      "status": "exploited",
+      "primary_category": "auth",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Token_Management_Issue",
+      "locations": [
+        "api/routers/ws_chat.py",
+        "api/routers/ws_chat.py:63",
+        "frontend/src/lib/api/ws-client.ts",
+        "frontend/src/lib/api/ws-client.ts:20",
+        "ws-client.ts",
+        "ws-client.ts:20",
+        "ws_chat.py",
+        "ws_chat.py:63"
+      ]
+    },
+    {
+      "canonical_id": "AUTH-VULN-08",
+      "title": "Session_Management_Flaw — unknown sink",
+      "severity": "high",
+      "status": "exploited",
+      "primary_category": "auth",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Session_Management_Flaw",
+      "locations": [
+        "api/routers/ws_chat.py",
+        "api/routers/ws_chat.py:380",
+        "client-id.ts",
+        "client-id.ts:39",
+        "frontend/src/lib/hooks/useWorkspaceWebSocket.ts",
+        "frontend/src/lib/hooks/useWorkspaceWebSocket.ts:42",
+        "frontend/src/lib/utils/client-id.ts",
+        "frontend/src/lib/utils/client-id.ts:39",
+        "useWorkspaceWebSocket.ts",
+        "useWorkspaceWebSocket.ts:42",
+        "ws_chat.py",
+        "ws_chat.py:380"
+      ]
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-12",
+      "title": "Horizontal — unknown sink",
+      "severity": "high",
+      "status": "exploited",
+      "primary_category": "authz",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Horizontal",
+      "locations": [
+        "api/routers/source_chat.py",
+        "api/routers/source_chat.py:92",
+        "source_chat.py",
+        "source_chat.py:592",
+        "source_chat.py:92"
+      ]
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-23",
+      "title": "Vertical — unknown sink",
+      "severity": "high",
+      "status": "unconfirmed",
+      "primary_category": "authz",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Vertical",
+      "locations": [
+        "docker-compose.yml",
+        "docker-compose.yml:10"
+      ]
+    },
+    {
+      "canonical_id": "CHAIN-001",
+      "title": "Chain_Exploit — unknown sink",
+      "severity": "high",
+      "status": "exploited",
+      "primary_category": "chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Chain_Exploit",
+      "locations": []
+    },
+    {
+      "canonical_id": "CHAIN-002",
+      "title": "Chain_Exploit — unknown sink",
+      "severity": "high",
+      "status": "exploited",
+      "primary_category": "chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Chain_Exploit",
+      "locations": []
+    },
+    {
+      "canonical_id": "CHAIN-003",
+      "title": "Chain_Exploit — unknown sink",
+      "severity": "high",
+      "status": "exploited",
+      "primary_category": "chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Chain_Exploit",
+      "locations": []
+    },
+    {
+      "canonical_id": "CHAIN-004",
+      "title": "Chain_Exploit — unknown sink",
+      "severity": "high",
+      "status": "exploited",
+      "primary_category": "chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Chain_Exploit",
+      "locations": []
+    },
+    {
+      "canonical_id": "CHAIN-005",
+      "title": "Chain_Exploit — unknown sink",
+      "severity": "high",
+      "status": "exploited",
+      "primary_category": "chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Chain_Exploit",
+      "locations": []
+    },
+    {
+      "canonical_id": "CHAIN-006",
+      "title": "Chain_Exploit — unknown sink",
+      "severity": "high",
+      "status": "exploited",
+      "primary_category": "chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Chain_Exploit",
+      "locations": []
+    },
+    {
+      "canonical_id": "CHAIN-007",
+      "title": "Chain_Exploit — unknown sink",
+      "severity": "high",
+      "status": "exploited",
+      "primary_category": "chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Chain_Exploit",
+      "locations": []
+    },
+    {
+      "canonical_id": "CRYPTO-002",
+      "title": "Key_Management — unknown sink",
+      "severity": "high",
+      "status": "unconfirmed",
+      "primary_category": "crypto",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Key_Management",
+      "locations": [
+        "api/auth.py",
+        "api/auth.py:18",
+        "api/auth.py:27",
+        "api/main.py",
+        "api/main.py:109",
+        "api/routers/ws_chat.py",
+        "api/routers/ws_chat.py:63",
+        "api/routers/ws_chat.py:65",
+        "auth.py",
+        "auth.py:18",
+        "auth.py:27",
+        "main.py",
+        "main.py:109",
+        "ws_chat.py",
+        "ws_chat.py:63",
+        "ws_chat.py:65"
+      ]
+    },
+    {
+      "canonical_id": "CRYPTO-004",
+      "title": "Key_Management — unknown sink",
+      "severity": "high",
+      "status": "exploited",
+      "primary_category": "crypto",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Key_Management",
+      "locations": [
+        "docker-compose.yml",
+        "docker-compose.yml:10",
+        "docker-compose.yml:12"
+      ]
+    },
+    {
+      "canonical_id": "INJ-VULN-07",
+      "title": "SSTI — webapp/graphs/transformation.py:122 Prompter(template_text=transformation_template_text).render(data=state).",
+      "severity": "high",
+      "status": "exploited",
+      "primary_category": "injection",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "SSTI",
+      "locations": [
+        "api/models.py",
+        "api/models.py:114",
+        "api/models.py:148",
+        "models.py",
+        "models.py:114",
+        "models.py:148",
+        "webapp/graphs/transformation.py",
+        "webapp/graphs/transformation.py:118",
+        "webapp/graphs/transformation.py:120",
+        "webapp/graphs/transformation.py:122",
+        "transformation.py",
+        "transformation.py:118",
+        "transformation.py:120",
+        "transformation.py:122"
+      ]
+    },
+    {
+      "canonical_id": "SCA-VULN-003",
+      "title": "Multiple vulnerabilities in axios",
+      "severity": "high",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-004",
+      "title": "Regular Expression Denial of Service in FastAPI multipart form parsing",
+      "severity": "high",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-005",
+      "title": "Multiple vulnerabilities in flatted",
+      "severity": "high",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-006",
+      "title": "form-data: CRLF injection in form-data via unescaped multipart field names and filenames",
+      "severity": "high",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-007",
+      "title": "Multiple vulnerabilities in lodash",
+      "severity": "high",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-008",
+      "title": "Multiple vulnerabilities in minimatch",
+      "severity": "high",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-009",
+      "title": "Multiple vulnerabilities in next",
+      "severity": "high",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-010",
+      "title": "Multiple vulnerabilities in picomatch",
+      "severity": "high",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-011",
+      "title": "Rollup 4 has Arbitrary File Write via Path Traversal",
+      "severity": "high",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-012",
+      "title": "Multiple vulnerabilities in setuptools",
+      "severity": "high",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-013",
+      "title": "Multiple vulnerabilities in tar",
+      "severity": "high",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-014",
+      "title": "Multiple vulnerabilities in vite",
+      "severity": "high",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-015",
+      "title": "Multiple vulnerabilities in ws",
+      "severity": "high",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "WS-VULN-01",
+      "title": "Unknown — unknown sink",
+      "severity": "high",
+      "status": "exploited",
+      "primary_category": "websocket",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "",
+      "locations": []
+    },
+    {
+      "canonical_id": "WS-VULN-03",
+      "title": "Unknown — unknown sink",
+      "severity": "high",
+      "status": "exploited",
+      "primary_category": "websocket",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "",
+      "locations": []
+    },
+    {
+      "canonical_id": "WS-VULN-04",
+      "title": "Unknown — unknown sink",
+      "severity": "high",
+      "status": "exploited",
+      "primary_category": "websocket",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "",
+      "locations": []
+    },
+    {
+      "canonical_id": "WS-VULN-05",
+      "title": "Unknown — unknown sink",
+      "severity": "high",
+      "status": "exploited",
+      "primary_category": "websocket",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "",
+      "locations": []
+    },
+    {
+      "canonical_id": "CRYPTO-001",
+      "title": "Token_Security — unknown sink",
+      "severity": "medium",
+      "status": "exploited",
+      "primary_category": "crypto",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Token_Security",
+      "locations": [
+        "api/auth.py",
+        "api/auth.py:63",
+        "api/routers/ws_chat.py",
+        "api/routers/ws_chat.py:57",
+        "auth-store.ts",
+        "auth-store.ts:212",
+        "auth-store.ts:91",
+        "auth.py",
+        "auth.py:63",
+        "frontend/src/lib/api/ws-client.ts",
+        "frontend/src/lib/api/ws-client.ts:20",
+        "frontend/src/lib/stores/auth-store.ts",
+        "frontend/src/lib/stores/auth-store.ts:212",
+        "frontend/src/lib/stores/auth-store.ts:91",
+        "ws-client.ts",
+        "ws-client.ts:20",
+        "ws_chat.py",
+        "ws_chat.py:57"
+      ]
+    },
+    {
+      "canonical_id": "CRYPTO-003",
+      "title": "Transport_Security — unknown sink",
+      "severity": "medium",
+      "status": "exploited",
+      "primary_category": "crypto",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Transport_Security",
+      "locations": [
+        "docker-compose.yml",
+        "docker-compose.yml:10",
+        "docker-compose.yml:26",
+        "webapp/database/repository.py",
+        "webapp/database/repository.py:276",
+        "webapp/database/repository.py:285",
+        "repository.py",
+        "repository.py:276",
+        "repository.py:285"
+      ]
+    },
+    {
+      "canonical_id": "SCA-VULN-016",
+      "title": "ajv has ReDoS when using `$data` option",
+      "severity": "medium",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-017",
+      "title": "brace-expansion: Zero-step sequence causes process hang and memory exhaustion",
+      "severity": "medium",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-018",
+      "title": "follow-redirects leaks Custom Authentication Headers to Cross-Domain Redirect Targets",
+      "severity": "medium",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-019",
+      "title": "JS-YAML: Quadratic-complexity DoS in merge key handling via repeated aliases",
+      "severity": "medium",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-020",
+      "title": "LangChain: Path traversal and sandbox escape in LangChain file-search middleware and loaders",
+      "severity": "medium",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-021",
+      "title": "LangChain: Path traversal and sandbox escape in LangChain file-search middleware and loaders",
+      "severity": "medium",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-022",
+      "title": "langchain-openai: Image token counting SSRF protection can be bypassed via DNS rebinding",
+      "severity": "medium",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-023",
+      "title": "LangGraph checkpoint loading has unsafe msgpack deserialization",
+      "severity": "medium",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-024",
+      "title": "PostCSS has XSS via Unescaped </style> in its CSS Stringify Output",
+      "severity": "medium",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-025",
+      "title": "PostCSS has XSS via Unescaped </style> in its CSS Stringify Output",
+      "severity": "medium",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-026",
+      "title": "pytest has vulnerable tmpdir handling",
+      "severity": "medium",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-027",
+      "title": "python-dotenv: Symlink following in set_key allows arbitrary file overwrite via cross-device rename fallback",
+      "severity": "medium",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "WS-VULN-02",
+      "title": "Unknown — unknown sink",
+      "severity": "medium",
+      "status": "exploited",
+      "primary_category": "websocket",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "",
+      "locations": []
+    },
+    {
+      "canonical_id": "WS-VULN-06",
+      "title": "Unknown — unknown sink",
+      "severity": "medium",
+      "status": "exploited",
+      "primary_category": "websocket",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "",
+      "locations": []
+    },
+    {
+      "canonical_id": "CRYPTO-005",
+      "title": "Random_Generation — unknown sink",
+      "severity": "low",
+      "status": "unconfirmed",
+      "primary_category": "crypto",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Random_Generation",
+      "locations": [
+        "api/routers/chat.py",
+        "api/routers/chat.py:524",
+        "api/routers/ws_chat.py",
+        "api/routers/ws_chat.py:380",
+        "chat.py",
+        "chat.py:524",
+        "client-id.ts",
+        "client-id.ts:16",
+        "client-id.ts:23",
+        "client-id.ts:24",
+        "frontend/src/lib/utils/client-id.ts",
+        "frontend/src/lib/utils/client-id.ts:16",
+        "frontend/src/lib/utils/client-id.ts:23",
+        "frontend/src/lib/utils/client-id.ts:24",
+        "ws_chat.py",
+        "ws_chat.py:380"
+      ]
+    },
+    {
+      "canonical_id": "SCA-VULN-028",
+      "title": "@babel/core: Arbitrary File Read via sourceMappingURL Comment",
+      "severity": "low",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    },
+    {
+      "canonical_id": "SCA-VULN-029",
+      "title": "@eslint/plugin-kit is vulnerable to Regular Expression Denial of Service attacks through ConfigCommentParser",
+      "severity": "low",
+      "status": "unconfirmed",
+      "primary_category": "supply_chain",
+      "secondary_categories": [],
+      "aliases": [],
+      "fix_branch": null,
+      "vulnerability_type": "Supply_Chain",
+      "locations": []
+    }
+  ],
+  "consolidations": [
+    {
+      "canonical_id": "AUTH-VULN-02",
+      "absorbed_aliases": [
+        "AUTH-VULN-01"
+      ],
+      "secondary_categories": []
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-04",
+      "absorbed_aliases": [
+        "AUTHZ-VULN-03"
+      ],
+      "secondary_categories": []
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-07",
+      "absorbed_aliases": [
+        "AUTHZ-VULN-05",
+        "AUTHZ-VULN-06"
+      ],
+      "secondary_categories": []
+    },
+    {
+      "canonical_id": "AUTHZ-VULN-10",
+      "absorbed_aliases": [
+        "AUTHZ-VULN-09"
+      ],
+      "secondary_categories": []
+    },
+    {
+      "canonical_id": "INJ-VULN-04",
+      "absorbed_aliases": [
+        "INJ-VULN-02"
+      ],
+      "secondary_categories": []
+    },
+    {
+      "canonical_id": "INJ-VULN-08",
+      "absorbed_aliases": [
+        "INJ-VULN-09"
+      ],
+      "secondary_categories": []
+    },
+    {
+      "canonical_id": "SSRF-VULN-04",
+      "absorbed_aliases": [
+        "SSRF-VULN-01",
+        "SSRF-VULN-02"
+      ],
+      "secondary_categories": []
+    },
+    {
+      "canonical_id": "AUTH-VULN-04",
+      "absorbed_aliases": [
+        "AUTH-VULN-03"
+      ],
+      "secondary_categories": []
+    }
+  ],
+  "fix_branches": []
+}

@@ -1,0 +1,1 @@
+**EXTERNAL ATTACKER SCOPE:** Report only vulnerabilities an internet-based attacker can reach and exploit through {{WEB_URL}}. Leave out anything that would need an internal network foothold, a VPN, or direct access to the server.

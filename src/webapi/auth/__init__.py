@@ -1,0 +1,1 @@
+"""Authentication wiring (fastapi-users)."""

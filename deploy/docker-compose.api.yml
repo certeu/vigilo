@@ -1,0 +1,27 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: vigilo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: vigilo
+    volumes: ["vigilo_pg:/var/lib/postgresql/data"]
+    profiles: ["api"]
+
+  vigilo-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    environment:
+      VIGILO_DATABASE_URL: postgresql+asyncpg://vigilo:${POSTGRES_PASSWORD:-changeme}@postgres:5432/vigilo
+      VIGILO_JWT_SECRET: ${VIGILO_JWT_SECRET:?set a strong secret}
+      VIGILO_FERNET_KEY: ${VIGILO_FERNET_KEY:?generate with python -c "from src.webapi.security.vault import generate_key; print(generate_key())"}
+      VIGILO_FIRST_ADMIN_EMAIL: ${VIGILO_FIRST_ADMIN_EMAIL:-}
+      VIGILO_FIRST_ADMIN_PASSWORD: ${VIGILO_FIRST_ADMIN_PASSWORD:-}
+      VIGILO_SERVE_UI: "false"
+    ports: ["8080:8080"]
+    depends_on: ["postgres"]
+    profiles: ["api"]
+
+volumes:
+  vigilo_pg:

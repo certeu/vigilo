@@ -1,0 +1,79 @@
+<!-- BEGIN:COMMON -->
+**Only run this login sequence if Playwright opens without an authenticated session.**
+**Playwright persists sessions between runs — check whether you are already logged in first, and if so skip these steps entirely.**
+
+<user_provided_configuration>
+{{user_instructions}}
+</user_provided_configuration>
+
+<authentication_execution>
+Choose the flow that matches the login_type in the configuration above and work through it:
+<!-- END:COMMON -->
+
+<!-- BEGIN:FORM -->
+**Form-based login:**
+1. Open the configured login_url with Playwright.
+2. Run the login_flow steps in order, one after another:
+   - Substitute $username with the supplied username credential.
+   - Substitute $password with the supplied password credential.
+   - Substitute $totp with the code returned by `generate-totp --secret {{totp_secret}}` (run it through the Bash tool).
+   - Carry out each step's action — typing into fields, clicking buttons, and so on.
+3. After any step that triggers navigation or loading, wait for the page to settle before moving on.
+4. Clear any consent dialog or "Continue as [user]" prompt by clicking through it.
+<!-- END:FORM -->
+
+<!-- BEGIN:SSO -->
+**SSO login:**
+1. Open the configured login_url with Playwright.
+2. Run the login_flow steps in order, one after another:
+   - Click the SSO provider button (e.g. "Sign in with Google").
+   - Select the correct account if you are prompted to.
+   - Substitute $username with the supplied username credential on the provider's login page.
+   - Substitute $password with the supplied password credential on the provider's login page.
+   - Substitute $totp with the code returned by `generate-totp --secret {{totp_secret}}` (run it through the Bash tool).
+   - Work through the OAuth consent screens: click "Allow", "Accept", or "Continue" and tick any required checkboxes.
+   - Clear "Continue as [username]" prompts by clicking "Continue".
+3. Let the OAuth callback and the final redirect finish.
+4. Make sure every consent and authorization step is handled explicitly, with none left pending.
+<!-- END:SSO -->
+
+<!-- BEGIN:VERIFICATION -->
+</authentication_execution>
+
+<success_verification>
+Once the flow completes, confirm you are genuinely authenticated:
+
+1. **Match the configured success condition:**
+   - `url_contains` — the current URL includes the specified substring.
+   - `url_equals_exactly` — the current URL matches the specified value exactly.
+   - `element_present` — the specified element is present on the page.
+
+2. **Sanity-check the session state:**
+   - You are no longer sitting on a login screen.
+   - No authentication error is being shown.
+   - Authenticated user content or interface is visible.
+
+3. **If it checks out:** the session is live — proceed with your primary task using this authenticated browser.
+
+4. **If it does not:**
+   - Wait 5 seconds, then run the entire flow ONE more time.
+   - If that second attempt also fails, report the authentication failure and stop — do not continue.
+   - Never perform authenticated actions against an unverified session.
+</success_verification>
+
+<error_handling>
+When the login flow errors out:
+1. Record exactly which step failed and capture any error message.
+2. Check for stray dialogs, pop-ups, or consent screens still waiting to be cleared.
+3. Wait 5 seconds and retry the complete flow once.
+4. If the retry also fails, report the failure and halt — do not begin the primary task.
+5. Never move into authenticated work while authentication is unconfirmed.
+
+Things that commonly trip up the flow:
+- OAuth consent screens needing an explicit "Allow" or "Accept" click.
+- Account-selection or "Continue as [user]" prompts.
+- TOTP/2FA codes expiring and needing regeneration.
+- Slow page loads that require an explicit wait.
+- Multi-step redirect chains during authentication.
+</error_handling>
+<!-- END:VERIFICATION -->

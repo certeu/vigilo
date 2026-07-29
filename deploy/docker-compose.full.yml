@@ -1,0 +1,232 @@
+# Full platform — everything needed to run REAL scans through the API/UI:
+#   Traefik (TLS reverse proxy) + Postgres + API + UI + MailHog + Temporal + Worker.
+#
+# A job created in the UI/API starts the real PentestPipelineWorkflow on Temporal;
+# the persistent worker (built from the root Dockerfile, same image `make scan` used)
+# runs it against the repo on a shared volume and writes the real report + logs there.
+# This replaces the manual `make scan` CLI path.
+#
+# ── Network exposure (hardened) ─────────────────────────────────────────────
+# ONLY Traefik publishes host ports (80 → redirect to 443, 443 → TLS). Everything
+# else is reachable only on the internal `vigilo_net` Docker network:
+#   • UI      — the sole public router (Host rule + TLS via the `orgca` resolver).
+#   • API     — NO router, NO published port. Reached only by the UI's nginx, which
+#               proxies /api → api:8080 internally (see web/nginx.conf).
+#   • Postgres / Temporal / MailHog — no router, no published port. Internal only.
+#
+# ── Certificates ────────────────────────────────────────────────────────────
+# TLS certificates are issued over ACME (HTTP-01 challenge on :80) and stored in
+# the `acme_data` volume, so they are NOT re-requested on every restart.
+#
+# The default CA is Let's Encrypt, which works for any host with a public DNS
+# name. Set ACME_CASERVER in .env to use a different CA (for example an internal
+# or corporate ACME server).
+#
+# Two requirements before first boot:
+#   • ACME_EMAIL must be a REAL address — Let's Encrypt rejects @example.com.
+#   • The CA must be able to reach this host on port 80 at ${VIGILO_HOSTNAME},
+#     so DNS must resolve and the firewall must allow it.
+#
+# Running without TLS, or behind your own reverse proxy? See "Deployment
+# options" in the README — you do not have to use Traefik.
+#
+# ── Usage ───────────────────────────────────────────────────────────────────
+#   Set in .env (or the shell):
+#     VIGILO_HOSTNAME=vigilo.example.com    # public UI hostname (default shown)
+#     VIGILO_JWT_SECRET=...  VIGILO_FERNET_KEY=...  POSTGRES_PASSWORD=...
+#     VIGILO_FIRST_ADMIN_EMAIL=admin@example.com  VIGILO_FIRST_ADMIN_PASSWORD=...
+#     # optional overrides: ACME_EMAIL, ACME_CASERVER
+#   docker compose --env-file .env -f deploy/docker-compose.full.yml up --build -d
+#   → UI at  https://${VIGILO_HOSTNAME}   (http:// redirects to https://)
+#   Model credentials for the worker come from the repo-root .env (env_file below).
+
+services:
+  traefik:
+    image: traefik:v3.7.8
+    environment:
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+      - http_proxy=
+      - https_proxy=
+      - NO_PROXY=*
+      - no_proxy=*
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Redirect all plain HTTP to HTTPS (the ACME HTTP-01 challenge on :80 is
+      # served before the redirect, so certificate issuance still works).
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      # ACME issuance — defaults to Let's Encrypt. Point ACME_CASERVER at your
+      # own CA to use an internal/corporate ACME server instead.
+      - "--certificatesresolvers.orgca.acme.email=${ACME_EMAIL:-admin@example.com}"
+      - "--certificatesresolvers.orgca.acme.storage=/acme/acme.json"
+      - "--certificatesresolvers.orgca.acme.caserver=${ACME_CASERVER:-https://acme-v02.api.letsencrypt.org/directory}"
+      - "--certificatesresolvers.orgca.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.orgca.acme.keytype=EC256"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - acme_data:/acme
+    restart: unless-stopped
+    networks: [vigilo_net]
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: vigilo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: vigilo
+    volumes:
+      - vigilo_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vigilo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks: [vigilo_net]           # internal only — no published port
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    # Dev mail catcher — internal only, NO published port. To read caught mail,
+    # port-forward temporarily: `docker compose port mailhog 8025` / an SSH tunnel.
+    # In production, point the API at a real relay (VIGILO_SMTP_* in .env) instead.
+    restart: unless-stopped
+    networks: [vigilo_net]
+
+  temporal:
+    image: temporalio/temporal:1.5.0
+    command: ["server", "start-dev", "--db-filename", "/home/temporal/temporal.db", "--ip", "0.0.0.0"]
+    environment:
+      # On proxied VMs Temporal's internal client dials itself; a daemon-injected
+      # proxy breaks it. Wipe proxy vars inside the container.
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+      - http_proxy=
+      - https_proxy=
+      - NO_PROXY=*
+      - no_proxy=*
+    volumes:
+      - temporal_data:/home/temporal
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "localhost:7233"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+    networks: [vigilo_net]           # internal only — no published port
+
+  worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        REPO_DIR: samples/mock_repo   # baked repo is unused; platform mounts repo at runtime
+    image: vigilo-worker:latest
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - NO_PROXY=${NO_PROXY:-temporal,localhost,127.0.0.1,0.0.0.0,postgres}
+      - no_proxy=${NO_PROXY:-temporal,localhost,127.0.0.1,0.0.0.0,postgres}
+    shm_size: 2gb
+    volumes:
+      - vigilo_jobs:/data/jobs
+    depends_on:
+      temporal:
+        condition: service_healthy
+    # Persistent worker: host the pipeline on the shared task queue (no self-start).
+    command: ["python3", "-m", "src.temporal.worker", "--serve", "--task-queue", "vigilo-pipeline"]
+    restart: unless-stopped
+    networks: [vigilo_net]           # internal only — no published port
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      VIGILO_DATABASE_URL: postgresql+asyncpg://vigilo:${POSTGRES_PASSWORD:-changeme}@postgres:5432/vigilo
+      VIGILO_JWT_SECRET: ${VIGILO_JWT_SECRET:?set a strong secret}
+      VIGILO_FERNET_KEY: ${VIGILO_FERNET_KEY:?generate one - see header}
+      VIGILO_FIRST_ADMIN_EMAIL: ${VIGILO_FIRST_ADMIN_EMAIL:-}
+      VIGILO_FIRST_ADMIN_PASSWORD: ${VIGILO_FIRST_ADMIN_PASSWORD:-}
+      # Public base URL used in invite + run-complete email links.
+      VIGILO_UI_BASE_URL: ${VIGILO_UI_BASE_URL:-https://${VIGILO_HOSTNAME:-vigilo.example.com}}
+      VIGILO_EXECUTION_ENGINE: ${VIGILO_EXECUTION_ENGINE:-temporal}
+      VIGILO_TEMPORAL_ADDRESS: temporal:7233
+      VIGILO_TEMPORAL_TASK_QUEUE: vigilo-pipeline
+      VIGILO_JOBS_DATA_DIR: /data/jobs
+      VIGILO_UPLOADS_DIR: /data/uploads
+      # Email: defaults target the bundled MailHog (catches all mail, no auth).
+      # For a real relay set HOST/PORT and, if needed, USER/PASSWORD/STARTTLS.
+      VIGILO_SMTP_HOST: ${VIGILO_SMTP_HOST:-mailhog}
+      VIGILO_SMTP_PORT: ${VIGILO_SMTP_PORT:-1025}
+      VIGILO_SMTP_FROM: ${VIGILO_SMTP_FROM:-vigilo@example.com}
+      VIGILO_SMTP_USER: ${VIGILO_SMTP_USER:-}
+      VIGILO_SMTP_PASSWORD: ${VIGILO_SMTP_PASSWORD:-}
+      VIGILO_SMTP_STARTTLS: ${VIGILO_SMTP_STARTTLS:-false}
+      VIGILO_GLOBAL_CONCURRENT_RUN_CAP: ${VIGILO_GLOBAL_CONCURRENT_RUN_CAP:-2}
+      # temporal engine reaches Temporal by service name; keep it off the proxy
+      NO_PROXY: temporal,localhost,127.0.0.1,postgres,mailhog
+    volumes:
+      - vigilo_jobs:/data/jobs
+      - vigilo_uploads:/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+    restart: unless-stopped
+    # NO published port and NO Traefik router: the API is reached only by the UI's
+    # internal nginx /api proxy over vigilo_net. It is not accessible from outside.
+    networks: [vigilo_net]
+
+  ui:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks: [vigilo_net]
+    # The ONLY public router: UI over HTTPS. nginx (inside this image) serves the
+    # SPA and proxies /api → api:8080 internally, so the API needs no router.
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=vigilo_net"
+      - "traefik.http.routers.vigilo-ui.rule=Host(`${VIGILO_HOSTNAME:-vigilo.example.com}`)"
+      - "traefik.http.routers.vigilo-ui.entrypoints=websecure"
+      - "traefik.http.routers.vigilo-ui.tls=true"
+      - "traefik.http.routers.vigilo-ui.tls.certresolver=orgca"
+      - "traefik.http.routers.vigilo-ui.middlewares=vigilo-sec"
+      - "traefik.http.services.vigilo-ui.loadbalancer.server.port=80"
+      # Curated security headers (HTTPS-only stack):
+      #   HSTS (2y, subdomains, preload) · no MIME sniffing · deny framing ·
+      #   trimmed referrer. X-XSS-Protection is intentionally omitted (deprecated).
+      - "traefik.http.middlewares.vigilo-sec.headers.stsSeconds=63072000"
+      - "traefik.http.middlewares.vigilo-sec.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.vigilo-sec.headers.stsPreload=true"
+      - "traefik.http.middlewares.vigilo-sec.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.vigilo-sec.headers.frameDeny=true"
+      - "traefik.http.middlewares.vigilo-sec.headers.referrerPolicy=strict-origin-when-cross-origin"
+
+volumes:
+  vigilo_pg:
+  vigilo_jobs:
+  vigilo_uploads:
+  temporal_data:
+  acme_data:
+
+networks:
+  vigilo_net:
+    name: vigilo_net
