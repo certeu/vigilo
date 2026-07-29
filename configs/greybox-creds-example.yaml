@@ -1,0 +1,39 @@
+# Grey-box scan credentials — copy and fill in real values
+identities:
+  - name: admin
+    role: admin
+    privilege_level: 10
+    login:
+      url: "{{WEB_URL}}/login"
+      method: form
+      fields:
+        username: "admin@example.com"
+        password: "CHANGE_ME"
+      success_indicator: "Dashboard"
+    totp_secret: null
+
+  - name: user
+    role: user
+    privilege_level: 1
+    login:
+      url: "{{WEB_URL}}/login"
+      method: form
+      fields:
+        username: "user@example.com"
+        password: "CHANGE_ME"
+      success_indicator: "Dashboard"
+    totp_secret: null
+
+  # Pre-authenticated cookie (EU Login / external SSO with 2FA).
+  # Log in via your browser, copy the Cookie header from DevTools, paste here.
+  # cookie_header and login are mutually exclusive — use one or the other.
+  #
+  # - name: operator
+  #   role: authenticated_user
+  #   privilege_level: 3
+  #   cookie_header: "JSESSIONID=abc123; eu_login_token=xyz789"
+
+  - name: anonymous
+    role: anonymous
+    privilege_level: 0
+    login: null

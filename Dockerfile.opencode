@@ -1,0 +1,159 @@
+# Vigilo Grey-Box Pipeline — OpenCode Executor
+#
+# Multi-stage build for grey-box worker with OpenCode instead of Claude Code.
+# Connects to models through a LiteLLM gateway using the @ai-sdk/openai-compatible
+# provider. No Anthropic API key required.
+#
+# Build with: make build-greybox-opencode
+
+# -- Stage 1: Builder --------------------------------------------------------
+FROM cgr.dev/chainguard/wolfi-base:latest AS builder
+
+RUN apk update && apk add --no-cache \
+    build-base git curl wget ca-certificates \
+    linux-headers \
+    go nodejs-22 npm \
+    python3 py3-pip \
+    bash unzip
+
+# Go tools: feroxbuster and nuclei
+ENV GOPATH=/go
+ENV PATH=$GOPATH/bin:/usr/local/go/bin:$PATH
+RUN mkdir -p $GOPATH/bin && \
+    go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.4.4
+
+# Feroxbuster (pre-built binary — pinned version)
+ARG FEROXBUSTER_VERSION=2.11.0
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then RUST_ARCH="x86_64"; \
+    elif [ "$ARCH" = "aarch64" ]; then RUST_ARCH="aarch64"; \
+    else RUST_ARCH="x86_64"; fi && \
+    curl -fsSL "https://github.com/epi052/feroxbuster/releases/download/v${FEROXBUSTER_VERSION}/${RUST_ARCH}-linux-feroxbuster.zip" -o /tmp/ferox.zip && \
+    unzip -o /tmp/ferox.zip -d /usr/local/bin/ && \
+    chmod +x /usr/local/bin/feroxbuster && \
+    rm /tmp/ferox.zip
+
+# testssl.sh
+RUN git clone --depth 1 https://github.com/drwetter/testssl.sh.git /opt/testssl && \
+    chmod +x /opt/testssl/testssl.sh && \
+    ln -s /opt/testssl/testssl.sh /usr/local/bin/testssl
+
+# WhatWeb (Ruby-based technology fingerprinting) — pinned version
+ARG WHATWEB_VERSION=0.5.5
+RUN git clone --depth 1 --branch v${WHATWEB_VERSION} \
+        https://github.com/urbanadventurer/WhatWeb.git /opt/whatweb && \
+    chmod +x /opt/whatweb/whatweb
+
+# Python dependencies into an isolated venv
+WORKDIR /app
+COPY pyproject.toml .
+COPY src/ ./src/
+COPY scripts/ ./scripts/
+RUN python3 -m venv /app/venv && \
+    /app/venv/bin/pip install --no-cache-dir -e ".[greybox]"
+
+# -- Stage 2: Runtime ---------------------------------------------------------
+FROM cgr.dev/chainguard/wolfi-base:latest
+
+USER root
+RUN apk update && apk add --no-cache \
+    git bash curl ca-certificates coreutils \
+    nmap openssl perl \
+    nodejs-22 npm \
+    python3 \
+    ruby \
+    # Chromium and dependencies for Playwright
+    chromium \
+    nss freetype harfbuzz \
+    libx11 libxcomposite libxdamage libxext libxfixes libxrandr \
+    mesa-gbm fontconfig
+
+# OpenCode CLI
+RUN npm install -g opencode-ai
+
+# OpenCode provider: LiteLLM via OpenAI-compatible SDK
+RUN mkdir -p /tmp/.config/opencode && \
+    cd /tmp/.config/opencode && \
+    npm init -y > /dev/null 2>&1 && \
+    npm install --save @ai-sdk/openai-compatible @opencode-ai/plugin
+
+# Playwright CLI (browser automation)
+RUN npm install -g @playwright/cli@0.1.1
+RUN mkdir -p /tmp/.claude/skills && \
+    playwright-cli install --skills && \
+    cp -r .claude/skills/playwright-cli /tmp/.claude/skills/ && \
+    rm -rf .claude
+
+# Copy Go binaries from builder (nuclei)
+COPY --from=builder /go/bin/nuclei /usr/local/bin/
+
+# Copy feroxbuster from builder
+COPY --from=builder /usr/local/bin/feroxbuster /usr/local/bin/
+
+# Copy testssl.sh from builder
+COPY --from=builder /opt/testssl /opt/testssl
+RUN ln -s /opt/testssl/testssl.sh /usr/local/bin/testssl
+
+# Copy WhatWeb from builder + install its sole runtime gem
+COPY --from=builder /opt/whatweb /opt/whatweb
+RUN gem install --no-document addressable && \
+    ln -s /opt/whatweb/whatweb /usr/local/bin/whatweb
+
+# Copy Python venv from builder
+COPY --from=builder /app/venv /app/venv
+ENV PATH="/app/venv/bin:$PATH"
+
+WORKDIR /app
+
+# Copy application code
+COPY src/ ./src/
+COPY prompts/ ./prompts/
+COPY scripts/ ./scripts/
+COPY configs/opencode.template.json ./configs/opencode.template.json
+COPY pyproject.toml .
+
+# Install the package in editable mode (with greybox extras: surrealdb + httpx)
+RUN /app/venv/bin/pip install --no-cache-dir -e ".[greybox]"
+
+# Make CLI tools available on PATH
+RUN ln -sf /app/scripts/save_deliverable.py /usr/local/bin/save-deliverable && \
+    chmod +x /app/scripts/save_deliverable.py && \
+    ln -sf /app/scripts/generate_totp.py /usr/local/bin/generate-totp && \
+    chmod +x /app/scripts/generate_totp.py && \
+    ln -sf /app/scripts/config_opencode.sh /usr/local/bin/config-opencode && \
+    chmod +x /app/scripts/config_opencode.sh && \
+    ln -sf /app/scripts/opencode_entrypoint.sh /usr/local/bin/opencode-entrypoint && \
+    chmod +x /app/scripts/opencode_entrypoint.sh
+
+# System-level git config
+RUN git config --system user.email "agent@localhost" && \
+    git config --system user.name "Vigilo Agent" && \
+    git config --system --add safe.directory '*'
+
+# Non-root scanner user
+RUN addgroup -g 1001 scanner && \
+    adduser -u 1001 -G scanner -s /bin/bash -D scanner && \
+    mkdir -p /workspace && \
+    mkdir -p /tmp/.cache /tmp/.config /tmp/.npm && \
+    chmod 777 /app /workspace /tmp/.cache /tmp/.config /tmp/.npm && \
+    chown -R scanner:scanner /app /workspace /tmp/.cache /tmp/.config /tmp/.npm
+
+# Copy entrypoint for optional UID remapping
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+# Environment
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PLAYWRIGHT_MCP_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV CHROMIUM_FLAGS="--no-sandbox --disable-setuid-sandbox"
+ENV VIGILO_DOCKER=true
+ENV GREYBOX_MODE=true
+ENV VIGILO_EXECUTOR=opencode
+ENV HOME=/tmp
+ENV XDG_CACHE_HOME=/tmp/.cache
+ENV XDG_CONFIG_HOME=/tmp/.config
+ENV npm_config_cache=/tmp/.npm
+
+ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["opencode-entrypoint"]

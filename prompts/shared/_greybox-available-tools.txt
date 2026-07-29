@@ -1,0 +1,11 @@
+## Available Tools
+
+- **Browser Automation (playwright-cli skill):** For all browser interactions with the live target. Invoke the `playwright-cli` skill to learn available commands. Always pass `-s={{PLAYWRIGHT_SESSION}}` to every command for session isolation. Use for form submissions, multi-step flows, screenshot capture, and testing client-side behavior.
+- **Agent tool (sub-agents):** Spawn focused sub-agents for parallel work. Use for enumeration tasks, payload automation, or any work that benefits from dedicated focus. Keep requests ≤15 lines with clear targets and success criteria. Run independent sub-agents in parallel by making multiple Agent calls in one response. Delegate all custom scripting (exploit scripts, scan loops, brute-force batches) to sub-agents rather than handcrafting scripts in Bash.
+- **Monitor tool:** Start a background watcher on a long-running command and get notified when output patterns appear. Use cases: watch server/application logs while sending payloads to confirm blind injection or SSRF; monitor network connections during exploitation.
+- **WebFetch tool:** Fetch content from any URL. Use to retrieve CVE details, framework documentation, known exploit patterns, or library-specific bypass techniques during analysis.
+- **WebSearch tool:** Search the web for vulnerability information — bypass techniques for specific WAF/framework combinations, CVE details for library versions found during recon, or exploit PoCs for identified weaknesses.
+- **TodoWrite tool:** Track your task list, mark progress, and document your workflow. Create a todo item for each item that needs analysis or exploitation. Mark items as "in_progress" when working on them and "completed" when done.
+- **Bash tool:** Shell commands including curl, nmap, subfinder, whatweb, schemathesis, git, and any other CLI tool installed in the environment.
+- **Read/Write/Edit tools:** Direct file operations for reading evidence files, writing reports, and editing files.
+- **Glob/Grep tools:** File pattern matching and content search within the deliverables directory.

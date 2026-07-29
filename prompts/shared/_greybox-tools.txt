@@ -1,0 +1,197 @@
+## graph-tool CLI Reference
+
+`graph-tool` is your interface to the shared knowledge graph. All agents read from and write to this graph for coordination. Output is JSON to stdout.
+
+### Query — Search the graph
+```bash
+graph-tool query --type endpoint --filter "injectable=untested" --limit 20
+graph-tool query --type finding --filter "vuln_type=sqli"
+graph-tool query --type lead --filter "status=open"
+graph-tool query --type parameter --filter "injectable=yes"
+```
+Node types: `page`, `endpoint`, `parameter`, `technology`, `identity`, `workflow`, `component`, `test_attempt`, `finding`, `lead`
+
+### Add — Create a new node
+```bash
+graph-tool add --type endpoint --id "GET_api_users" --data '{"method":"GET","path":"/api/users","full_url":"http://target/api/users","discovered_by":"discovery"}' --parent "page:page_index"
+
+graph-tool add --type parameter --id "search_q" --data '{"name":"q","location":"query","data_type":"string","shape":"free_text","discovered_by":"discovery"}' --parent "endpoint:GET_api_search"
+```
+
+The `--parent` flag auto-creates structural edges (`has_param` for parameters, `has_endpoint` for endpoints, `detected_on` for technologies). **Always use it** — nodes without edges are invisible to downstream processing.
+
+Parameter `shape` drives scheduler routing — set it when creating the parameter. Valid values:
+`numeric_id` (ints, DB keys), `uuid`, `email`, `url` (full URL values — use for SSRF targets), `json` (JSON object/array bodies), `boolean`, `enum` (constrained free string), `free_text` (default, unknown).
+
+### Update — Modify an existing node
+```bash
+graph-tool update --id "parameter:q" --set "injectable=yes,sanitized=partial"
+```
+
+### Test Attempt — Record a testing attempt (MANDATORY for every test)
+```bash
+graph-tool test-attempt \
+  --target "parameter:search_q" \
+  --vuln-type sqli \
+  --technique "union-based injection" \
+  --payload "' UNION SELECT 1,2,3--" \
+  --verdict conclusive_clean \
+  --response-code 200 \
+  --response-excerpt "No results found"
+```
+Verdicts (`--verdict` is required, no default):
+- `conclusive_vulnerable` — payload proved exploitability
+- `conclusive_clean` — target tested negative for this vuln class with high confidence
+- `inconclusive` — WAF block, 5xx, rate-limit, or ambiguous response. Retries up to `max_inconclusive_retries`.
+- `failed` — the attempt itself crashed/aborted (e.g. browser error, network failure). Requires `--failure-reason`. Retries up to `max_failed_retries`.
+
+Only `conclusive_*` verdicts foreclose retries; `inconclusive` / `failed` count as retry candidates, NOT as coverage.
+
+### Finding — Record a confirmed vulnerability
+```bash
+graph-tool finding \
+  --target "parameter:search_q" \
+  --vuln-type sqli \
+  --severity high \
+  --cwe CWE-89 \
+  --title "SQL Injection in search parameter" \
+  --poc-payload "' OR 1=1--" \
+  --impact "Database read access via UNION injection" \
+  --grants '["db_read"]' \
+  --requires '["authenticated"]' \
+  --evidence-file "deliverables/screenshots/sqli-search.png" \
+  --derived-from "test_attempt:ta_abc123def456"
+```
+
+The `--derived-from` flag links the finding to the test_attempt that proved it. **Always include it** — use the test_attempt ID returned by `graph-tool test-attempt`.
+
+### Lead — Record a suspicious signal for investigation
+```bash
+graph-tool lead \
+  --target "endpoint:POST_api_admin_config" \
+  --signal "error_leak" \
+  --hypothesis "Stack trace exposed on malformed JSON input may reveal internal paths" \
+  --signal-strength high \
+  --hints '["Try malformed Content-Type", "Send truncated JSON body"]' \
+  --evidence-blob "deliverables/evidence/lead_L1.json" \
+  --produced-from "test_attempt:ta_93482"
+```
+
+`--evidence-blob` points to a JSON file you wrote containing the minimal HTTP exchange that triggered the signal (request line, headers, body, response status, response excerpt). `--produced-from` links the lead to the test_attempt that produced it via a `produced_from` edge, giving the investigator agent a provenance trail. Include both whenever a test_attempt produced the signal; omit `--produced-from` if the lead came from passive observation during discovery.
+
+### Access — Record identity access result for authz mapping
+```bash
+graph-tool access --identity admin --endpoint "GET_api_users" --result allow --status-code 200
+graph-tool access --identity user --endpoint "GET_api_admin" --result deny --status-code 403
+```
+
+### Claim / Release — Coordinate with other agents
+```bash
+graph-tool claim --id "endpoint:GET_api_users" --agent "injection-specialist" --ttl 300
+graph-tool release --id "endpoint:GET_api_users" --agent "injection-specialist"
+```
+Always claim before testing. Release when done. TTL is in seconds (default 300).
+
+### Signal — Emit an urgent signal (e.g., new credentials found)
+```bash
+graph-tool signal --type credentials_found --data '{"username":"backup_admin","password":"changeme","source":"config endpoint"}'
+```
+Signal types: `credentials_found` (triggers immediate planner re-run), `new_endpoint`, `finding_confirmed`, `lead_detected`
+
+### Relate — Create a relationship between nodes
+```bash
+graph-tool relate --from "finding:F_001" --to "finding:F_002" --type chains_with --data '{"chain_order":1}'
+```
+
+### Raw — Execute arbitrary SurrealQL (advanced)
+```bash
+graph-tool raw --query "SELECT * FROM endpoint WHERE rate_limited = true"
+```
+
+### Export — Dump the full graph for reporting
+```bash
+graph-tool export --format yaml --max-tokens 15000
+graph-tool export --format json
+```
+
+## Specialist CLI Tools (available on PATH)
+
+The container ships these tools so specialists can reach for the right instrument
+instead of hand-rolling shell loops. Always record results back to the graph via
+`graph-tool test-attempt` / `graph-tool finding` / `graph-tool lead` — the tool
+output itself is just evidence, not a deliverable.
+
+### dalfox — XSS scanner / parameter analyser
+Authenticated, payload-aware reflected/stored XSS scanning. Use it for the heavy
+lifting on confirmed reflection sinks; pair with the `reflects_in` edges already
+present in the graph.
+```bash
+# Single-URL probe (use the cookie header captured during auth)
+dalfox url "https://target/api/search?q=test" \
+    --cookie "session=…" \
+    --skip-bav --silence --format json
+
+# From a file with one URL per line
+dalfox file urls.txt --cookie "session=…" --format json
+```
+
+### commix — command injection scanner
+Targeted, parameter-aware command injection testing with confirmation primitives
+(time-based, output-based, file-based). Always pass `--batch` for non-interactive
+runs and direct it at a single parameter at a time so you can record one
+`graph-tool test-attempt` per probe.
+```bash
+commix --batch --url "https://target/api/run?cmd=ls" --cookie "session=…" \
+    --technique=tfb --skip-empty --output-dir=deliverables/evidence/commix_<F-id>
+```
+
+### jwt_tool — JWT analysis, tampering, and key confusion
+Use for `none`-algorithm, key-confusion (HS256 with RSA pubkey), `kid` injection,
+and JWT-vs-session timing checks. Reads tokens from the command line; the `-T`
+flag generates the full taxonomy of attack tokens for you to replay.
+```bash
+# Inspect a token
+jwt_tool eyJhbGciOi...
+
+# Generate the full attack-token set (none, weak HS256, alg confusion, kid injection)
+jwt_tool eyJhbGciOi... -T -M at -rh "Cookie: session=…" -u "https://target/api/me"
+```
+
+### interactsh-client — out-of-band (OOB) callback canary
+Required for blind SSRF, blind XXE, blind command injection, and DNS-exfil PoCs.
+Spin up a session, paste the unique hostname into your payload, and watch
+captures stream back to stdout. Record any HTTP/DNS interaction as a `finding`
+with `--evidence-file` pointing to the saved log.
+```bash
+# Start a listener (stays in foreground; redirect to a log file)
+interactsh-client -json -o deliverables/evidence/oob_<F-id>.log &
+
+# The first line of stdout is the unique hostname, e.g. "abc123.oast.me"
+# Paste it into the payload (e.g. SSRF: ?url=http://abc123.oast.me/probe)
+# Then read the log file to confirm the callback fired.
+```
+
+### httpx (projectdiscovery) — protocol fingerprinting + tech detect
+Already used by the `httpx_probe` managed scanner for ALPN/HTTP2/HTTP3
+detection. Specialists may also call it directly for ad-hoc protocol probes.
+```bash
+httpx -u https://target -tls-grab -http2 -alpn -jarm -tech-detect -json -silent
+```
+
+### nmap — service / port discovery
+Wrapped by the `nmap` managed scanner (active recon, opt-in). If you need a
+direct probe of a specific port range or service, use it carefully and rate-limit:
+```bash
+nmap -sT -sV -p 80,443,8080,8443,3306,5432,6379 --max-rate 200 target.example.org
+```
+
+## Tool Selection Cheat Sheet
+
+| Vuln class | First-line tool | Confirmation evidence |
+|------------|----------------|-----------------------|
+| Reflected/stored XSS | `dalfox` against `reflects_in` sinks | screenshot + `test-attempt` with payload |
+| Command injection | `commix --technique=tfb` (time-based) | timing delta in `response_excerpt` |
+| Blind SSRF / XXE / RCE | `interactsh-client` | `evidence-file` pointing at OOB log |
+| JWT auth bypass | `jwt_tool -T` | recorded `Authorization: Bearer …` per attempt |
+| Sibling service / port | `nmap` (managed) → record as `lead` | service banner in lead hypothesis |
+| HTTP smuggling / h2c | `httpx -http2 -alpn` for fingerprint | manual confirmation via curl/nuclei template |

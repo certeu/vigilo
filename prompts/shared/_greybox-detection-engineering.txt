@@ -1,0 +1,72 @@
+## Detection Engineering Output (REQUIRED on every confirmed finding)
+
+A finding without detection guidance is half a deliverable. Defenders need to
+know how to spot the attack in the wild — both for IR (was this exploited
+before we found it?) and for prevention (block it at the WAF / SIEM tomorrow).
+
+When you record a `graph-tool finding`, you MUST also pass `--detection-hints`
+with a JSON object containing one or more of the following keys. Populate
+every key for which you can produce a useful, *specific* value. Do NOT pad
+with generic guidance ("monitor your logs") — empty is better than empty-
+calorie.
+
+### Recognised keys
+
+- `waf_rule` — A concrete WAF rule snippet that would have blocked the
+  payload. Prefer ModSecurity / Coraza syntax (the OWASP CRS dialect).
+  Reference real fields (`ARGS`, `REQUEST_HEADERS`, `REQUEST_BODY`,
+  `REQUEST_URI`). Include the rule ID range `id:9000xx` so it slots into
+  custom-rule space.
+- `log_signature` — A regex (PCRE-flavored) or grep pattern that matches
+  the attack in standard application/web logs (combined log format,
+  nginx, apache, IIS). Anchor on the part of the request that's
+  reliably logged (URI, status, user-agent), not on bodies that may not be.
+- `siem_query` — A SIEM query in the dialect most likely to be in use.
+  Default to KQL (Sentinel/Elastic). If the target stack is clearly
+  Splunk, use SPL. Make it ready-to-paste — include the index/sourcetype
+  and a time window placeholder.
+- `network_indicator` — A host, IP, path, or user-agent string an
+  IDS/proxy can match on. Useful for OAST/OOB-callback domains, known-
+  malicious referers, or attacker-controlled hosts referenced in the PoC.
+
+### Output contract
+
+```bash
+graph-tool finding \
+  --target "parameter:search_q" \
+  --vuln-type injection \
+  --severity critical \
+  --cwe CWE-89 \
+  --title "SQL Injection in search parameter" \
+  --poc-payload "' UNION SELECT username,password FROM users--" \
+  --impact "Full database read access" \
+  --derived-from "test_attempt:ta_abc123" \
+  --detection-hints '{
+    "waf_rule": "SecRule ARGS:q \"@rx (?i)(union(\\s|/\\*.*\\*/)+select|order\\s+by\\s+\\d+--)\" \"id:900100,phase:2,deny,status:403,msg:'\''SQLi attempt on search.q'\''\"",
+    "log_signature": "GET /api/search\\?q=.*(union[+\\s]select|order[+\\s]by[+\\s]\\d+--)",
+    "siem_query": "let window=15m; AppRequests | where TimeGenerated > ago(window) | where Url contains \"/api/search\" and (Url matches regex \"(?i)union\\\\s+select\" or Url matches regex \"(?i)order\\\\s+by\\\\s+\\\\d+--\") | project TimeGenerated, ClientIP, Url, ResponseCode",
+    "network_indicator": "URI path /api/search with query string containing union/select tokens"
+  }'
+```
+
+### What good detection hints look like
+
+- **Specific to THIS payload family**, not generic "look for SQLi in logs"
+- **Anchored on a reliably-logged field** (URI, method, status, length)
+  rather than request bodies (which most stacks don't log)
+- **Tunable** — the WAF rule should be one a SecOps engineer can drop in
+  and tighten, not a regex of last resort that will false-positive on
+  legitimate traffic
+- **Honest about blind/timing attacks** — for time-based blind injection,
+  `log_signature` may be a "response time > N seconds on /endpoint with
+  parameter X present"; admit when the only signal is timing.
+
+### When you genuinely have no useful hint
+
+If a finding produces no externally observable signal (e.g. a stored XSS
+that fires only inside an admin-only DOM and leaves no log trace),
+populate `--detection-hints '{"log_signature": "no externally observable
+signal — detection requires DOM monitoring on /admin/console"}'` so the
+report writer can still surface the gap. Skipping `--detection-hints`
+entirely is reserved for findings the specialist genuinely could not
+characterise.
