@@ -13,6 +13,7 @@ import os
 import shutil
 import subprocess
 import tarfile
+import tempfile
 import zipfile
 from urllib.parse import urlparse, urlunparse
 
@@ -52,21 +53,55 @@ def _is_safe_member(name: str) -> bool:
     return ".." not in parts
 
 
-def extract_archive(archive_path: str, dest_dir: str) -> str:
-    """Extract a .zip or .tar(.gz) archive into ``dest_dir`` (created if needed)."""
+# Sidecar directory macOS Finder's "Compress" adds alongside the real content;
+# it holds resource-fork metadata, never source, so it is dropped on extraction.
+_MACOSX_DIR = "__MACOSX"
+
+
+def _flatten_extracted(staging_dir: str, dest_dir: str) -> None:
+    """Move extracted content from ``staging_dir`` into ``dest_dir``, dropping the
+    macOS ``__MACOSX`` sidecar and descending a single top-level wrapper directory.
+
+    Finder's "Compress" (and many ``git archive`` / GitHub tarballs) nest all files
+    under one wrapper dir, so a bare extract leaves the real source one level too
+    deep and the scanner sees an empty root. When the only meaningful entry is a
+    lone directory, its contents become the repo root instead."""
+    entries = [e for e in os.listdir(staging_dir) if e != _MACOSX_DIR]
+    root = staging_dir
+    if len(entries) == 1 and os.path.isdir(os.path.join(staging_dir, entries[0])):
+        root = os.path.join(staging_dir, entries[0])
     os.makedirs(dest_dir, exist_ok=True)
-    if archive_path.endswith(".zip"):
-        with zipfile.ZipFile(archive_path) as zf:
-            for member in zf.namelist():
-                if not _is_safe_member(member):
-                    raise ValueError(f"unsafe archive member: {member!r}")
-            zf.extractall(dest_dir)
-    elif archive_path.endswith((".tar.gz", ".tgz", ".tar")):
-        with tarfile.open(archive_path) as tf:
-            # filter='data' (py3.12+) strips absolute paths / traversal / special files.
-            tf.extractall(dest_dir, filter="data")
-    else:
-        raise ValueError(f"unsupported archive type: {archive_path!r}")
+    for entry in os.listdir(root):
+        if root is staging_dir and entry == _MACOSX_DIR:
+            continue
+        shutil.move(os.path.join(root, entry), os.path.join(dest_dir, entry))
+
+
+def extract_archive(archive_path: str, dest_dir: str) -> str:
+    """Extract a .zip or .tar(.gz) archive into ``dest_dir`` (created if needed).
+
+    Extraction goes to a staging dir first, then :func:`_flatten_extracted` moves the
+    real content into ``dest_dir`` — dropping ``__MACOSX`` and descending a single
+    wrapper directory so Finder/tarball archives land at the repo root."""
+    os.makedirs(dest_dir, exist_ok=True)
+    # Stage on the same filesystem as dest_dir so the flatten step is a rename, not a copy.
+    staging_dir = tempfile.mkdtemp(prefix=".extract-", dir=dest_dir)
+    try:
+        if archive_path.endswith(".zip"):
+            with zipfile.ZipFile(archive_path) as zf:
+                for member in zf.namelist():
+                    if not _is_safe_member(member):
+                        raise ValueError(f"unsafe archive member: {member!r}")
+                zf.extractall(staging_dir)
+        elif archive_path.endswith((".tar.gz", ".tgz", ".tar")):
+            with tarfile.open(archive_path) as tf:
+                # filter='data' (py3.12+) strips absolute paths / traversal / special files.
+                tf.extractall(staging_dir, filter="data")
+        else:
+            raise ValueError(f"unsupported archive type: {archive_path!r}")
+        _flatten_extracted(staging_dir, dest_dir)
+    finally:
+        shutil.rmtree(staging_dir, ignore_errors=True)
     return dest_dir
 
 

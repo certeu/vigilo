@@ -144,12 +144,19 @@ class TemporalEngine:
             "stages": build_stages_payload(job),
             "description": scan.get("description", ""),
         }
+        from temporalio.common import WorkflowIDConflictPolicy
+
         client = await self._client()
+        # USE_EXISTING: if a workflow with this id is already running (e.g. start() is
+        # re-fired after a transient error / retry), adopt it instead of raising
+        # "Workflow execution already started" — which would mark this run failed while
+        # the real execution keeps running as an untracked zombie.
         await client.start_workflow(
             "PentestPipelineWorkflow",
             input_data,
             id=run.session_id,
             task_queue=settings.temporal_task_queue,
+            id_conflict_policy=WorkflowIDConflictPolicy.USE_EXISTING,
         )
         run.workflow_id = run.session_id
         run.status = RUN_RUNNING

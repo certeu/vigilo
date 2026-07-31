@@ -43,6 +43,33 @@ class TestExtractArchive:
         with pytest.raises(ValueError):
             extract_archive(str(bad), str(tmp_path / "repo"))
 
+    def test_strips_single_wrapper_dir(self, tmp_path):
+        # macOS Finder / GitHub tarballs nest content under one wrapper dir; it must
+        # be descended so the source lands at the repo root, not one level too deep.
+        archive = tmp_path / "wrapped.zip"
+        _make_zip(archive, {"proj/app.py": "print(1)", "proj/sub/x.txt": "hi"})
+        dest = tmp_path / "repo"
+        extract_archive(str(archive), str(dest))
+        assert (dest / "app.py").read_text() == "print(1)"
+        assert (dest / "sub" / "x.txt").read_text() == "hi"
+        assert not (dest / "proj").exists()
+
+    def test_drops_macosx_sidecar(self, tmp_path):
+        archive = tmp_path / "finder.zip"
+        _make_zip(archive, {"proj/app.py": "x=1", "__MACOSX/._app.py": "junk"})
+        dest = tmp_path / "repo"
+        extract_archive(str(archive), str(dest))
+        assert (dest / "app.py").exists()
+        assert not (dest / "__MACOSX").exists()
+
+    def test_keeps_multiple_top_level_entries(self, tmp_path):
+        # More than one top-level entry => not a wrapper, keep the layout as-is.
+        archive = tmp_path / "flat.zip"
+        _make_zip(archive, {"a.py": "1", "b/c.py": "2"})
+        dest = tmp_path / "repo"
+        extract_archive(str(archive), str(dest))
+        assert (dest / "a.py").exists() and (dest / "b" / "c.py").exists()
+
 
 class TestCloneUrl:
     def test_token_injected(self):
