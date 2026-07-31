@@ -22,7 +22,8 @@ from src.webapi.settings import get_settings
 logger = logging.getLogger(__name__)
 
 _MAX_ENTRIES = 20000
-_SKIP_DIRS = {".git", ".vigilo"}  # internal plumbing, not part of the source tree
+# __MACOSX is Finder's resource-fork sidecar; drop it like other internal plumbing.
+_SKIP_DIRS = {".git", ".vigilo", "__MACOSX"}
 _SKIP_FILES = {".vigilo-remote-url"}  # marker written by prepare_repo, not source
 
 
@@ -35,6 +36,27 @@ def _skip(path: str) -> bool:
     return any(s in _SKIP_DIRS for s in segs) or segs[-1] in _SKIP_FILES
 
 
+def _lone_root_prefix(names: list[str]) -> str:
+    """Return the single top-level wrapper dir shared by every member (e.g. Finder's
+    ``project/`` wrapper), as a ``"prefix/"`` string to strip — or ``""`` if members
+    live at more than one top level. Mirrors ingestion._flatten_extracted so the browse
+    tree matches the extracted repo root."""
+    tops = set()
+    kept = 0
+    for n in names:
+        n = n.replace("\\", "/")
+        if not n or _skip(n):
+            continue
+        kept += 1
+        head, sep, _rest = n.partition("/")
+        if not sep:  # a file at the archive root -> no lone wrapper dir
+            return ""
+        tops.add(head)
+        if len(tops) > 1:
+            return ""
+    return next(iter(tops)) + "/" if kept and len(tops) == 1 else ""
+
+
 def capture_repo_tree(repo_id: str, source_path: str) -> int:
     """Persist the file listing of ``source_path`` (a directory OR a .zip archive).
 
@@ -44,10 +66,15 @@ def capture_repo_tree(repo_id: str, source_path: str) -> int:
     truncated = False
     if os.path.isfile(source_path) and source_path.endswith(".zip"):
         with zipfile.ZipFile(source_path) as zf:
-            for n in zf.namelist():
+            names = zf.namelist()
+            prefix = _lone_root_prefix(names)  # strip a Finder/tarball wrapper dir
+            for n in names:
                 if n.endswith("/") or _skip(n):
                     continue
-                paths.append(n.replace("\\", "/"))
+                n = n.replace("\\", "/")
+                if prefix and n.startswith(prefix):
+                    n = n[len(prefix):]
+                paths.append(n)
                 if len(paths) >= _MAX_ENTRIES:
                     truncated = True
                     break
