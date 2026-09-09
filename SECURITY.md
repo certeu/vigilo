@@ -11,7 +11,7 @@ Vigilo is under active development, yet currently still in alpha.
 ## Reporting a Vulnerability
 
 To report a vulnerability, please contact CERT-EU via
-[services@cert.europa.eu](mailto:service@cert.europa.eu).
+[services@cert.europa.eu](mailto:services@cert.europa.eu).
 
 ## See also
 
