@@ -13,6 +13,8 @@ import json
 import logging
 import os
 import time
+import shutil
+
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -255,7 +257,35 @@ async def validate_agent_output(agent_name: str, repo_path: str) -> bool:
         )
         return True
 
-    deliverable = Path(repo_path) / "deliverables" / definition.deliverable_filename
+    deliverables_dir = Path(repo_path) / "deliverables"
+    deliverable = deliverables_dir / definition.deliverable_filename
+
+    # Search the candidate folders in priority order for the deliverable
+    executor_type = get_executor_type()
+    candidate_dirs = [
+        deliverables_dir,
+        Path("/tmp") / executor_type,
+        Path("/tmp") / "deliverables",
+        Path("/tmp"),
+    ]
+
+    source_dir = None
+    for candidate in candidate_dirs:
+        if (candidate / definition.deliverable_filename).exists():
+            source_dir = candidate
+            break
+
+    # Make sure that any deliverable found is at the deliverables directory
+    if source_dir is not None and source_dir != deliverables_dir:
+        deliverables_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(
+            "Deliverable for agent '%s' found in %s -- moving to %s",
+            agent_name,
+            source_dir,
+            deliverable,
+        )
+        shutil.move(str(source_dir / definition.deliverable_filename), str(deliverable))
+
     if not deliverable.exists():
         logger.error(
             "Validation failed for agent '%s': missing %s",
