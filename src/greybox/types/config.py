@@ -1,11 +1,19 @@
 """Grey-box pipeline configuration types."""
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+logger = logging.getLogger(__name__)
+
+# Managed scanners that existed in earlier releases and have been removed.
+# Kept so older YAML configs that still list them load cleanly instead of
+# failing at dispatch time with "Unknown scan type".
+REMOVED_MANAGED_SCANS: frozenset[str] = frozenset({"nmap"})
 
 
 class IdentityConfig(BaseModel):
@@ -62,16 +70,26 @@ class GreyBoxConfig(BaseModel):
         "header_analysis": True, "cors_check": True, "default_creds": True,
         "tech_fingerprint": True, "robots_sitemap": True,
         # Active recon scanners — opt-in via active_recon_enabled below.
-        "nmap": False, "httpx_probe": False,
+        "httpx_probe": False,
     })
     # Slice 13 B: concurrency bound + wall-clock deadline for managed scans
     # running inside Phase 1.
     managed_scan_concurrency: int = Field(default=4, ge=1)
     preflight_scan_deadline_s: int = Field(default=600, ge=1)
-    # Active recon master switch. When False, nmap and httpx_probe are skipped
-    # even if their managed_scans entries are True. Network-touchy probes
-    # (port scans, ALPN/H2/H3 fingerprinting) require explicit operator opt-in.
+    # Active recon master switch. When False, httpx_probe is skipped even if
+    # its managed_scans entry is True. Network-touchy probes (ALPN/H2/H3
+    # fingerprinting) require explicit operator opt-in.
     active_recon_enabled: bool = False
+
+    @field_validator("managed_scans")
+    @classmethod
+    def _drop_removed_scans(cls, v: dict[str, bool]) -> dict[str, bool]:
+        removed = sorted(k for k in v if k in REMOVED_MANAGED_SCANS)
+        if removed:
+            logger.warning(
+                "Ignoring removed managed scanner(s) in config: %s", ", ".join(removed)
+            )
+        return {k: on for k, on in v.items() if k not in REMOVED_MANAGED_SCANS}
 
     @model_validator(mode="after")
     def _floor_below_ceiling(self) -> GreyBoxConfig:

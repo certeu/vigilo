@@ -15,7 +15,7 @@ RUN apk update && apk add --no-cache \
     go nodejs-22 npm \
     python3 py3-pip \
     ruby ruby-dev \
-    nmap bash
+    bash
 
 # Go tools
 ENV GOPATH=/go
@@ -51,7 +51,7 @@ FROM cgr.dev/chainguard/wolfi-base:latest
 USER root
 RUN apk update && apk add --no-cache \
     git bash curl ca-certificates \
-    libpcap nmap \
+    libpcap \
     nodejs-22 npm \
     python3 ruby \
     # Chromium and dependencies for Playwright

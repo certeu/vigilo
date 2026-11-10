@@ -12,6 +12,6 @@
   - **Returns:** JSON to stdout: `{"status":"success","filepath":"...","validated":true}` or `{"status":"error","message":"...","retryable":true}`
   - **For large reports:** Write to disk first, then use `--file-path`. Do NOT pass large reports via `--content`.
   - **For JSON queues:** You may use `--content '{"vulnerabilities": [...]}'`. Queue files are validated automatically.
-- **Bash tool:** Shell commands including curl, nmap, subfinder, whatweb, schemathesis, git, and any other CLI tool installed in the environment.
+- **Bash tool:** Shell commands including curl, subfinder, whatweb, schemathesis, git, and any other CLI tool installed in the environment.
 - **Read/Write/Edit tools:** Direct file operations for reading source code, writing reports, and editing files.
 - **Glob/Grep tools:** File pattern matching and content search across the codebase.

@@ -6,6 +6,6 @@
 - **WebFetch tool:** Fetch content from any URL. Use to retrieve CVE details, framework documentation, known exploit patterns, or library-specific bypass techniques during analysis.
 - **WebSearch tool:** Search the web for vulnerability information — bypass techniques for specific WAF/framework combinations, CVE details for library versions found during recon, or exploit PoCs for identified weaknesses.
 - **TodoWrite tool:** Track your task list, mark progress, and document your workflow. Create a todo item for each item that needs analysis or exploitation. Mark items as "in_progress" when working on them and "completed" when done.
-- **Bash tool:** Shell commands including curl, nmap, subfinder, whatweb, schemathesis, git, and any other CLI tool installed in the environment.
+- **Bash tool:** Shell commands including curl, subfinder, whatweb, schemathesis, git, and any other CLI tool installed in the environment.
 - **Read/Write/Edit tools:** Direct file operations for reading evidence files, writing reports, and editing files.
 - **Glob/Grep tools:** File pattern matching and content search within the deliverables directory.

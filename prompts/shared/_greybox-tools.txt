@@ -178,13 +178,6 @@ detection. Specialists may also call it directly for ad-hoc protocol probes.
 httpx -u https://target -tls-grab -http2 -alpn -jarm -tech-detect -json -silent
 ```
 
-### nmap — service / port discovery
-Wrapped by the `nmap` managed scanner (active recon, opt-in). If you need a
-direct probe of a specific port range or service, use it carefully and rate-limit:
-```bash
-nmap -sT -sV -p 80,443,8080,8443,3306,5432,6379 --max-rate 200 target.example.org
-```
-
 ## Tool Selection Cheat Sheet
 
 | Vuln class | First-line tool | Confirmation evidence |
@@ -193,5 +186,4 @@ nmap -sT -sV -p 80,443,8080,8443,3306,5432,6379 --max-rate 200 target.example.or
 | Command injection | `commix --technique=tfb` (time-based) | timing delta in `response_excerpt` |
 | Blind SSRF / XXE / RCE | `interactsh-client` | `evidence-file` pointing at OOB log |
 | JWT auth bypass | `jwt_tool -T` | recorded `Authorization: Bearer …` per attempt |
-| Sibling service / port | `nmap` (managed) → record as `lead` | service banner in lead hypothesis |
 | HTTP smuggling / h2c | `httpx -http2 -alpn` for fingerprint | manual confirmation via curl/nuclei template |
