@@ -2,7 +2,7 @@
 #
 # Multi-stage build for grey-box worker.
 # No baked-in target repository — grey-box operates externally via browser + API.
-# Includes security scanning tools (feroxbuster, nuclei, testssl.sh, nmap) and
+# Includes security scanning tools (feroxbuster, nuclei, testssl.sh, httpx) and
 # graph-tool for SurrealDB attack graph management.
 #
 # Build with: make build-greybox
@@ -78,7 +78,7 @@ FROM cgr.dev/chainguard/wolfi-base:latest
 USER root
 RUN apk update && apk add --no-cache \
     git bash curl ca-certificates \
-    nmap openssl \
+    openssl \
     nodejs-22 npm \
     python3 \
     ruby \

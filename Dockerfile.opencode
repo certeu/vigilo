@@ -58,7 +58,7 @@ FROM cgr.dev/chainguard/wolfi-base:latest
 USER root
 RUN apk update && apk add --no-cache \
     git bash curl ca-certificates coreutils \
-    nmap openssl perl \
+    openssl perl \
     nodejs-22 npm \
     python3 \
     ruby \

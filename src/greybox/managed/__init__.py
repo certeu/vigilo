@@ -18,7 +18,6 @@ def _register_scanners() -> None:
     from src.greybox.managed.default_creds import DefaultCredsScanner
     from src.greybox.managed.whatweb import WhatwebScanner
     from src.greybox.managed.robots_sitemap import RobotsSitemapScanner
-    from src.greybox.managed.nmap import NmapScanner
     from src.greybox.managed.httpx_probe import HttpxProbeScanner
 
     SCANNER_REGISTRY.update({
@@ -30,7 +29,6 @@ def _register_scanners() -> None:
         "default_creds": DefaultCredsScanner,
         "tech_fingerprint": WhatwebScanner,
         "robots_sitemap": RobotsSitemapScanner,
-        "nmap": NmapScanner,
         "httpx_probe": HttpxProbeScanner,
     })
 
@@ -38,7 +36,7 @@ def _register_scanners() -> None:
 # Active-recon scanners that are gated by ``GreyBoxConfig.active_recon_enabled``.
 # The workflow drops these from the dispatch list when the flag is False even
 # if their per-scanner toggle in ``managed_scans`` is True.
-ACTIVE_RECON_SCANNERS: frozenset[str] = frozenset({"nmap", "httpx_probe"})
+ACTIVE_RECON_SCANNERS: frozenset[str] = frozenset({"httpx_probe"})
 
 
 def get_scanner(scan_type: str, target_url: str, **kwargs: object) -> BaseScanner:

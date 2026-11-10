@@ -188,14 +188,24 @@ def test_capability_vocabulary():
 def test_managed_scans_default_roster():
     from src.greybox.types.config import GreyBoxConfig
     cfg = GreyBoxConfig()
-    # 8 always-on scanners + 2 active-recon scanners (gated by
+    # 8 always-on scanners + 1 active-recon scanner (gated by
     # active_recon_enabled, default off).
-    assert len(cfg.managed_scans) == 10
+    assert len(cfg.managed_scans) == 9
     assert "tech_fingerprint" in cfg.managed_scans
     assert "robots_sitemap" in cfg.managed_scans
-    assert cfg.managed_scans["nmap"] is False
+    assert "nmap" not in cfg.managed_scans
     assert cfg.managed_scans["httpx_probe"] is False
     assert cfg.active_recon_enabled is False
+
+
+def test_removed_nmap_scanner_is_ignored_in_legacy_config():
+    from src.greybox.managed import ACTIVE_RECON_SCANNERS, SCANNER_REGISTRY, _register_scanners
+    from src.greybox.types.config import GreyBoxConfig
+    cfg = GreyBoxConfig(managed_scans={"nmap": True, "nuclei": True})
+    assert cfg.managed_scans == {"nuclei": True}
+    _register_scanners()
+    assert "nmap" not in SCANNER_REGISTRY
+    assert "nmap" not in ACTIVE_RECON_SCANNERS
 
 
 def test_report_in_prompt_templates():

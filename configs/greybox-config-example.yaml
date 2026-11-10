@@ -12,9 +12,9 @@ scope:
     - "Test checkout workflow for business logic flaws"
 
 # Active recon master switch. When false (default), the workflow drops
-# nmap and httpx_probe from the managed-scan dispatch even if they are
-# enabled below. Flip to true ONLY when the engagement scope authorises
-# port scanning and ALPN/H2 fingerprinting against the target host.
+# httpx_probe from the managed-scan dispatch even if it is enabled below.
+# Flip to true ONLY when the engagement scope authorises ALPN/H2
+# fingerprinting against the target host.
 active_recon_enabled: false
 
 managed_scans:
@@ -27,7 +27,6 @@ managed_scans:
   tech_fingerprint: true
   robots_sitemap: true
   # Active recon — only run when active_recon_enabled is also true.
-  nmap: false           # top-1000 TCP, -sT -sV (single-host service discovery)
   httpx_probe: false    # ALPN / HTTP2 / JARM transport fingerprinting
 
 budget:
