@@ -38,7 +38,7 @@ RUN ARCH=$(uname -m) && \
     rm /tmp/ferox.zip
 
 # testssl.sh
-RUN git clone --depth 1 https://github.com/drwetter/testssl.sh.git /opt/testssl && \
+RUN git clone --depth 1 https://github.com/testssl/testssl.sh.git /opt/testssl && \
     chmod +x /opt/testssl/testssl.sh && \
     ln -s /opt/testssl/testssl.sh /usr/local/bin/testssl
 
