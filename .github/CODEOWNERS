@@ -1,0 +1,6 @@
+# Code owners for Vigilo.
+# Owners listed here are automatically requested for review on every pull
+# request, and their approval is required before merging into main.
+# Owners must have write access to the repository.
+
+* @adiaz-cert
