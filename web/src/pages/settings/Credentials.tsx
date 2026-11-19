@@ -25,7 +25,12 @@ const KINDS: { value: Kind; label: string; hint: string; secretLabel: string }[]
     secretLabel: "Token",
   },
 ];
-const KIND_LABEL: Record<string, string> = Object.fromEntries(KINDS.map((k) => [k.value, k.label]));
+// GitHub credentials are created with their repository, so they are only listed here.
+const KIND_LABEL: Record<string, string> = {
+  ...Object.fromEntries(KINDS.map((k) => [k.value, k.label])),
+  github_token: "GitHub token",
+  github_app: "GitHub App",
+};
 
 // Lists and creates the caller's credentials through the existing /credentials API.
 // Secrets are write-only: the API never returns them, and the form clears the secret
@@ -90,7 +95,7 @@ export function Credentials() {
         label: label.trim(),
         // a login account is stored as {"user", "password"} (encrypted like any secret)
         secret: kind === "login_account" ? JSON.stringify({ user: username.trim(), password: secret }) : secret,
-        gitlab_base_url: kind === "gitlab_token" && gitlabUrl.trim() ? gitlabUrl.trim() : null,
+        forge_base_url: kind === "gitlab_token" && gitlabUrl.trim() ? gitlabUrl.trim() : null,
       });
       setSecret("");
       setUsername("");
@@ -154,7 +159,7 @@ export function Credentials() {
                 <tr key={c.id} className="border-b border-line/60">
                   <td className="px-4 py-3 font-medium">
                     {c.label}
-                    {c.gitlab_base_url && <span className="mono block text-xs font-normal text-slate">{c.gitlab_base_url}</span>}
+                    {c.forge_base_url && <span className="mono block text-xs font-normal text-slate">{c.forge_base_url}</span>}
                   </td>
                   <td className="px-4 py-3"><Badge>{KIND_LABEL[c.kind] ?? c.kind}</Badge></td>
                   <td className="px-4 py-3 text-slate">{c.has_secret ? "Stored (hidden)" : "Missing"}</td>
@@ -255,7 +260,7 @@ export function Credentials() {
                   placeholder="https://gitlab.example.org"
                   aria-describedby={`${ids}-gl-err`}
                 />
-                <FieldError id={`${ids}-gl-err`} messages={errorsFor(formErrors, "gitlab_base_url")} />
+                <FieldError id={`${ids}-gl-err`} messages={errorsFor(formErrors, "forge_base_url")} />
               </div>
             )}
             {formError && <p role="alert" className="text-sm text-severity-critical">{formError}</p>}

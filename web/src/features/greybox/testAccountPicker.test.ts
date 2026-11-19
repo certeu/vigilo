@@ -9,7 +9,7 @@ const accounts: Credential[] = Array.from({ length: 200 }, (_, index) => ({
   id: `account-${index}`,
   kind: "login_account",
   label: `Synthetic user ${index}`,
-  gitlab_base_url: null,
+  forge_base_url: null,
   created_at: "2026-11-24T00:00:00Z",
   has_secret: true,
 }));

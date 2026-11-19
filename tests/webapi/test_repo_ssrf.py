@@ -90,7 +90,7 @@ def test_validate_access_never_runs_git_for_denied_host():
     called = []
     runner = lambda *a, **k: called.append(1) or types.SimpleNamespace(returncode=0, stdout="", stderr="")
     with pytest.raises(ValueError):
-        ingestion.validate_gitlab_access("http://169.254.169.254/x.git", None, runner)
+        ingestion.validate_remote_access("http://169.254.169.254/x.git", None, runner)
     assert called == []
 
 
@@ -101,5 +101,5 @@ def test_validate_access_passes_pinned_env_to_git(monkeypatch):
     def runner(cmd, capture_output, text, timeout, env):
         seen.update(env)
         return types.SimpleNamespace(returncode=0, stdout="a\trefs/heads/m\n", stderr="")
-    assert ingestion.validate_gitlab_access("https://gl.example/x.git", None, runner) == 1
+    assert ingestion.validate_remote_access("https://gl.example/x.git", None, runner) == 1
     assert seen["GIT_CONFIG_COUNT"] == "2"

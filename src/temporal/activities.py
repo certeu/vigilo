@@ -1333,7 +1333,7 @@ async def rebuild_git(input: ActivityInput) -> dict[str, Any]:
         async with _heartbeating("rebuild_git"):
             if (input.push or {}).get("enabled") and run_secrets.has_reference(input.secrets):
                 try:
-                    token = (await run_secrets.redeem(input.secrets, ["gitlab_token"])).get("gitlab_token")
+                    token = (await run_secrets.redeem(input.secrets, ["forge_token"])).get("forge_token")
                 except (run_secrets.RedemptionRefused, run_secrets.RedemptionUnavailable) as exc:
                     logger.warning("Git rebuild: GitLab credential not available (%s)", exc)
             return await rebuild_git_from_remote(

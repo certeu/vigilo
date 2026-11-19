@@ -39,7 +39,7 @@ def _job(**kw) -> SimpleNamespace:
 def _repo(**kw) -> SimpleNamespace:
     base = dict(
         id=uuid.uuid4(), source_type="upload", default_credential_id=None,
-        gitlab_url=None, push_patches=False, scan_config={}, pipeline_config={},
+        remote_url=None, push_patches=False, scan_config={}, pipeline_config={},
     )
     base.update(kw)
     return SimpleNamespace(**base)
@@ -85,7 +85,7 @@ def _no_ingestion(monkeypatch, request):
 
 # --------------------------------------------------------------------------- temporal
 
-GITLAB_REPO = dict(source_type="gitlab", gitlab_url="https://gl.example/g/x.git",
+GITLAB_REPO = dict(source_type="gitlab", remote_url="https://gl.example/g/x.git",
                    default_credential_id=uuid.uuid4())
 
 
@@ -180,7 +180,7 @@ class TestTemporalEngine:
         for base, _d, files in os.walk(run.data_dir):
             for f in files:
                 assert "glpat-secret" not in open(os.path.join(base, f), errors="ignore").read()
-        assert await stored_bundle(session_maker, run) == {"gitlab_token": "glpat-secret"}
+        assert await stored_bundle(session_maker, run) == {"forge_token": "glpat-secret"}
 
     async def test_no_secret_without_opt_in(self, monkeypatch, tmp_path, patched_settings, session_maker):
         patched_settings()
@@ -231,7 +231,7 @@ class TestTemporalEngine:
         run, client = await self._start(
             monkeypatch, tmp_path, _repo(push_patches=True, **GITLAB_REPO), token="t0k3n-value")
         assert await stored_bundle(session_maker, run) == {
-            "gitlab_token": "t0k3n-value", "cookie_header": "S=c00kie-value"}
+            "forge_token": "t0k3n-value", "cookie_header": "S=c00kie-value"}
 
     async def test_secret_revoked_when_run_finishes(
         self, monkeypatch, tmp_path, patched_settings, session_maker
@@ -385,7 +385,7 @@ class TestDockerEngine:
             assert secret not in repr(self.tclient.start_workflow.call_args) or secret == key
         assert list(call.kwargs["volumes"]) == [os.path.join(run.data_dir, "repo")]
         assert await stored_bundle(session_maker, run) == {
-            "gitlab_token": "glpat-secret", "cookie_header": "S=cookie-secret-value"}
+            "forge_token": "glpat-secret", "cookie_header": "S=cookie-secret-value"}
 
     async def test_secret_revoked_when_launch_fails(
         self, monkeypatch, tmp_path, patched_settings, session_maker

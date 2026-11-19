@@ -68,7 +68,7 @@ async def internal(session_maker):
         yield c
 
 
-def _post(client, run_id, key, want=("gitlab_token",)):
+def _post(client, run_id, key, want=("forge_token",)):
     return client.post(f"/internal/v1/runs/{run_id}/secrets", json={"key": key, "want": list(want)})
 
 
@@ -76,7 +76,7 @@ class TestStore:
     async def test_secret_is_encrypted_at_rest_and_key_is_hashed(self, session_maker):
         rid = await _make_run(session_maker)
         async with session_maker() as s:
-            key = await secret_store.issue(s, rid, {"gitlab_token": "glpat-PLAIN"})
+            key = await secret_store.issue(s, rid, {"forge_token": "glpat-PLAIN"})
         async with session_maker() as s:
             rec = await s.get(RunSecret, rid)
         assert b"glpat-PLAIN" not in rec.secret_enc and key not in rec.key_hash
@@ -85,21 +85,21 @@ class TestStore:
     async def test_redeem_returns_only_the_requested_kinds(self, session_maker):
         rid = await _make_run(session_maker)
         async with session_maker() as s:
-            key = await secret_store.issue(s, rid, {"gitlab_token": "t0k", "cookie_header": "S=c"})
+            key = await secret_store.issue(s, rid, {"forge_token": "t0k", "cookie_header": "S=c"})
         async with session_maker() as s:
             assert await secret_store.redeem(s, rid, key, ["cookie_header"]) == {"cookie_header": "S=c"}
-            assert await secret_store.redeem(s, rid, key, ["gitlab_token"]) == {"gitlab_token": "t0k"}
+            assert await secret_store.redeem(s, rid, key, ["forge_token"]) == {"forge_token": "t0k"}
 
     async def test_wrong_key_unknown_run_and_other_runs_key_are_refused(self, session_maker):
         a, b = await _make_run(session_maker), await _make_run(session_maker)
         async with session_maker() as s:
-            ka = await secret_store.issue(s, a, {"gitlab_token": "tok-a"})
-            kb = await secret_store.issue(s, b, {"gitlab_token": "tok-b"})
+            ka = await secret_store.issue(s, a, {"forge_token": "tok-a"})
+            kb = await secret_store.issue(s, b, {"forge_token": "tok-b"})
         async with session_maker() as s:
             for rid, key in ((a, "wrong" * 8), (a, kb), (b, ka), (uuid.uuid4(), ka)):
                 with pytest.raises(secret_store.RedemptionRefused):
-                    await secret_store.redeem(s, rid, key, ["gitlab_token"])
-            assert await secret_store.redeem(s, a, ka, ["gitlab_token"]) == {"gitlab_token": "tok-a"}
+                    await secret_store.redeem(s, rid, key, ["forge_token"])
+            assert await secret_store.redeem(s, a, ka, ["forge_token"]) == {"forge_token": "tok-a"}
 
     async def test_kind_not_held_is_refused(self, session_maker):
         rid = await _make_run(session_maker)
@@ -107,39 +107,39 @@ class TestStore:
             key = await secret_store.issue(s, rid, {"cookie_header": "S=c"})
         async with session_maker() as s:
             with pytest.raises(secret_store.RedemptionRefused):
-                await secret_store.redeem(s, rid, key, ["gitlab_token"])
+                await secret_store.redeem(s, rid, key, ["forge_token"])
 
     @pytest.mark.parametrize("status", [RUN_SUCCEEDED, RUN_FAILED, RUN_CANCELLED])
     async def test_refused_once_the_run_is_terminal_and_record_dropped(self, session_maker, status):
         rid = await _make_run(session_maker)
         async with session_maker() as s:
-            key = await secret_store.issue(s, rid, {"gitlab_token": "t0k"})
+            key = await secret_store.issue(s, rid, {"forge_token": "t0k"})
         async with session_maker() as s:
             run = await s.get(Run, rid)
             run.status = status
             await s.commit()
         async with session_maker() as s:
             with pytest.raises(secret_store.RedemptionRefused):
-                await secret_store.redeem(s, rid, key, ["gitlab_token"])
+                await secret_store.redeem(s, rid, key, ["forge_token"])
         async with session_maker() as s:
             assert await s.get(RunSecret, rid) is None
 
     async def test_expired_record_is_refused(self, session_maker):
         rid = await _make_run(session_maker)
         async with session_maker() as s:
-            key = await secret_store.issue(s, rid, {"gitlab_token": "t0k"})
+            key = await secret_store.issue(s, rid, {"forge_token": "t0k"})
             rec = await s.get(RunSecret, rid)
             rec.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
             await s.commit()
         async with session_maker() as s:
             with pytest.raises(secret_store.RedemptionRefused):
-                await secret_store.redeem(s, rid, key, ["gitlab_token"])
+                await secret_store.redeem(s, rid, key, ["forge_token"])
 
     async def test_revoke_and_purge(self, session_maker):
         a, b = await _make_run(session_maker), await _make_run(session_maker, RUN_SUCCEEDED)
         async with session_maker() as s:
-            await secret_store.issue(s, a, {"gitlab_token": "x"})
-            await secret_store.issue(s, b, {"gitlab_token": "y"})
+            await secret_store.issue(s, a, {"forge_token": "x"})
+            await secret_store.issue(s, b, {"forge_token": "y"})
         async with session_maker() as s:
             assert await secret_store.purge_finished(s) == 1       # b is terminal
             assert await secret_store.revoke(s, a) is True
@@ -152,24 +152,24 @@ class TestStore:
         get_settings.cache_clear()
         rid = await _make_run(session_maker)
         async with session_maker() as s:
-            key = await secret_store.issue(s, rid, {"gitlab_token": "t0k"})
+            key = await secret_store.issue(s, rid, {"forge_token": "t0k"})
         async with session_maker() as s:
             for _ in range(3):
-                await secret_store.redeem(s, rid, key, ["gitlab_token"])
+                await secret_store.redeem(s, rid, key, ["forge_token"])
             with pytest.raises(secret_store.RedemptionRateLimited):
-                await secret_store.redeem(s, rid, key, ["gitlab_token"])
+                await secret_store.redeem(s, rid, key, ["forge_token"])
             assert (await s.get(RunSecret, rid)).redeem_count == 3
         get_settings.cache_clear()
 
     async def test_redemptions_are_logged_without_values(self, session_maker, caplog):
         rid = await _make_run(session_maker)
         async with session_maker() as s:
-            key = await secret_store.issue(s, rid, {"gitlab_token": "glpat-VALUE"})
+            key = await secret_store.issue(s, rid, {"forge_token": "glpat-VALUE"})
         caplog.set_level("INFO")
         async with session_maker() as s:
-            await secret_store.redeem(s, rid, key, ["gitlab_token"], client="10.0.0.5")
+            await secret_store.redeem(s, rid, key, ["forge_token"], client="10.0.0.5")
             with pytest.raises(secret_store.RedemptionRefused):
-                await secret_store.redeem(s, rid, "bad" * 10, ["gitlab_token"], client="10.0.0.6")
+                await secret_store.redeem(s, rid, "bad" * 10, ["forge_token"], client="10.0.0.6")
         text = caplog.text
         assert "secret redeemed" in text and "refused" in text and str(rid) in text
         assert "glpat-VALUE" not in text and key not in text
@@ -179,15 +179,15 @@ class TestInternalEndpoint:
     async def test_redeem_over_http(self, internal, session_maker):
         rid = await _make_run(session_maker)
         async with session_maker() as s:
-            key = await secret_store.issue(s, rid, {"gitlab_token": "t0k", "cookie_header": "S=c"})
-        r = await _post(internal, rid, key, ["gitlab_token"])
-        assert r.status_code == 200 and r.json() == {"secrets": {"gitlab_token": "t0k"}}
+            key = await secret_store.issue(s, rid, {"forge_token": "t0k", "cookie_header": "S=c"})
+        r = await _post(internal, rid, key, ["forge_token"])
+        assert r.status_code == 200 and r.json() == {"secrets": {"forge_token": "t0k"}}
         assert r.headers["cache-control"] == "no-store"
 
     async def test_refusals_are_403_and_uniform(self, internal, session_maker):
         rid = await _make_run(session_maker)
         async with session_maker() as s:
-            key = await secret_store.issue(s, rid, {"gitlab_token": "t0k"})
+            key = await secret_store.issue(s, rid, {"forge_token": "t0k"})
         bad = await _post(internal, rid, "x" * 40)
         unknown = await _post(internal, uuid.uuid4(), key)
         assert bad.status_code == unknown.status_code == 403 and bad.json() == unknown.json()
@@ -195,7 +195,7 @@ class TestInternalEndpoint:
     async def test_refused_after_terminal(self, internal, session_maker):
         rid = await _make_run(session_maker)
         async with session_maker() as s:
-            key = await secret_store.issue(s, rid, {"gitlab_token": "t0k"})
+            key = await secret_store.issue(s, rid, {"forge_token": "t0k"})
             (await s.get(Run, rid)).status = RUN_CANCELLED
             await s.commit()
         assert (await _post(internal, rid, key)).status_code == 403
@@ -229,7 +229,7 @@ class TestInternalEndpoint:
 
     async def test_public_app_serves_no_internal_path(self, client):
         r = await client.post(f"/internal/v1/runs/{uuid.uuid4()}/secrets",
-                              json={"key": "x" * 40, "want": ["gitlab_token"]})
+                              json={"key": "x" * 40, "want": ["forge_token"]})
         assert r.status_code == 404
 
 
@@ -243,7 +243,7 @@ class TestLifecycle:
         class Boom:
             async def start(self, run, job, repo):
                 async with session_maker() as s:
-                    await secret_store.issue(s, run.id, {"gitlab_token": "t0k"})
+                    await secret_store.issue(s, run.id, {"forge_token": "t0k"})
                 raise RuntimeError("no docker")
 
         async with session_maker() as s:
@@ -259,7 +259,7 @@ class TestLifecycle:
 
         rid = await _make_run(session_maker, RUN_SUCCEEDED)
         async with session_maker() as s:
-            await secret_store.issue(s, rid, {"gitlab_token": "t0k"})
+            await secret_store.issue(s, rid, {"forge_token": "t0k"})
             await delete_run(s, FakeEngine(), await s.get(Run, rid))
             await s.commit()
             assert await s.get(RunSecret, rid) is None
@@ -395,3 +395,27 @@ class TestRepositoryUrl:
         with pytest.raises(ValueError):
             build_clone_url("https://u:p@h/x.git", "tok")
         reject_embedded_credentials("https://h:8443/x.git")
+
+
+class TestLegacyKindName:
+    """``gitlab_token`` was the run-secret kind before ``forge_token``."""
+
+    async def test_record_issued_before_the_rename_is_redeemed_as_forge_token(self, session_maker):
+        from src.webapi.security.vault import build_vault
+        from src.webapi.settings import get_settings
+
+        rid = await _make_run(session_maker)
+        async with session_maker() as s:
+            key = await secret_store.issue(s, rid, {"forge_token": "new"})
+            rec = await s.get(RunSecret, rid)
+            rec.secret_enc = build_vault(get_settings()).encrypt(json.dumps({"gitlab_token": "old"}))
+            await s.commit()
+        async with session_maker() as s:
+            assert await secret_store.redeem(s, rid, key, ["forge_token"]) == {"forge_token": "old"}
+
+    async def test_old_name_is_still_accepted_when_asking(self, session_maker, internal):
+        rid = await _make_run(session_maker)
+        async with session_maker() as s:
+            key = await secret_store.issue(s, rid, {"gitlab_token": "t0k"})
+        r = await _post(internal, rid, key, ["gitlab_token"])
+        assert r.status_code == 200 and r.json() == {"secrets": {"gitlab_token": "t0k"}}

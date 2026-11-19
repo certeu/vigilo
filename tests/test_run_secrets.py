@@ -88,12 +88,12 @@ def stub(monkeypatch):
 
 class TestRedeemClient:
     async def test_redeems_exactly_the_requested_kinds(self, stub):
-        s = stub(body={"secrets": {"gitlab_token": "glpat-TOKEN-1234"}})
-        got = await run_secrets.redeem(REF, ["gitlab_token"])
-        assert got == {"gitlab_token": "glpat-TOKEN-1234"}
+        s = stub(body={"secrets": {"forge_token": "glpat-TOKEN-1234"}})
+        got = await run_secrets.redeem(REF, ["forge_token"])
+        assert got == {"forge_token": "glpat-TOKEN-1234"}
         path, body = s.requests[0]
         assert path == f"/internal/v1/runs/{REF['ref']}/secrets"
-        assert body == {"key": REF["key"], "want": ["gitlab_token"]}
+        assert body == {"key": REF["key"], "want": ["forge_token"]}
 
     async def test_redeemed_values_are_registered_for_masking(self, stub):
         stub(body={"secrets": {"cookie_header": COOKIE}})
@@ -105,14 +105,14 @@ class TestRedeemClient:
     async def test_refusal_is_permanent_and_leaks_nothing(self, stub, code):
         stub(status=code, body={"detail": "refused"})
         with pytest.raises(run_secrets.RedemptionRefused) as e:
-            await run_secrets.redeem(REF, ["gitlab_token"])
+            await run_secrets.redeem(REF, ["forge_token"])
         assert REF["key"] not in str(e.value)
 
     @pytest.mark.parametrize("code", [429, 500, 502])
     async def test_server_trouble_is_transient(self, stub, code):
         stub(status=code)
         with pytest.raises(run_secrets.RedemptionUnavailable):
-            await run_secrets.redeem(REF, ["gitlab_token"])
+            await run_secrets.redeem(REF, ["forge_token"])
 
     async def test_unreachable_is_transient(self, monkeypatch):
         with socket.socket() as sk:
@@ -120,18 +120,18 @@ class TestRedeemClient:
             port = sk.getsockname()[1]
         monkeypatch.setenv("VIGILO_INTERNAL_API_URL", f"http://127.0.0.1:{port}")
         with pytest.raises(run_secrets.RedemptionUnavailable):
-            await run_secrets.redeem(REF, ["gitlab_token"])
+            await run_secrets.redeem(REF, ["forge_token"])
 
     async def test_no_reference_is_refused_without_a_request(self):
         for ref in (None, {}, {"ref": "x"}):
             with pytest.raises(run_secrets.RedemptionRefused):
-                await run_secrets.redeem(ref, ["gitlab_token"])
+                await run_secrets.redeem(ref, ["forge_token"])
 
     async def test_proxies_from_the_environment_are_not_used(self, stub, monkeypatch):
-        s = stub(body={"secrets": {"gitlab_token": "tok-abcdef"}})
+        s = stub(body={"secrets": {"forge_token": "tok-abcdef"}})
         monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:1")
         monkeypatch.setenv("http_proxy", "http://127.0.0.1:1")
-        assert (await run_secrets.redeem(REF, ["gitlab_token"]))["gitlab_token"] == "tok-abcdef"
+        assert (await run_secrets.redeem(REF, ["forge_token"]))["forge_token"] == "tok-abcdef"
         assert s.requests
 
     def test_default_url_points_at_the_internal_port(self, monkeypatch):
@@ -179,7 +179,7 @@ class TestEndToEndAgainstTheRealInternalApp:
             other = Run(job_id=j.id, status="running", session_id="s2", data_dir="/y")
             s.add_all([run, other])
             await s.commit()
-            key = await secret_store.issue(s, run.id, {"gitlab_token": "glpat-E2E-TOKEN"})
+            key = await secret_store.issue(s, run.id, {"forge_token": "glpat-E2E-TOKEN"})
             run_id, other_id = run.id, other.id
         await eng.dispose()
 
@@ -207,12 +207,12 @@ class TestEndToEndAgainstTheRealInternalApp:
         monkeypatch.setenv("VIGILO_INTERNAL_API_URL", f"http://127.0.0.1:{port}")
         try:
             ref = {"ref": str(run_id), "key": key}
-            assert await run_secrets.redeem(ref, ["gitlab_token"]) == {"gitlab_token": "glpat-E2E-TOKEN"}
+            assert await run_secrets.redeem(ref, ["forge_token"]) == {"forge_token": "glpat-E2E-TOKEN"}
             # another run's id with this run's key, and a wrong key: refused
             with pytest.raises(run_secrets.RedemptionRefused):
-                await run_secrets.redeem({"ref": str(other_id), "key": key}, ["gitlab_token"])
+                await run_secrets.redeem({"ref": str(other_id), "key": key}, ["forge_token"])
             with pytest.raises(run_secrets.RedemptionRefused):
-                await run_secrets.redeem({"ref": str(run_id), "key": "w" * 40}, ["gitlab_token"])
+                await run_secrets.redeem({"ref": str(run_id), "key": "w" * 40}, ["forge_token"])
             # the platform marks the run finished: no more redemption
             eng2 = create_async_engine(url)
             async with async_sessionmaker(eng2, class_=AsyncSession)() as s:
@@ -220,7 +220,7 @@ class TestEndToEndAgainstTheRealInternalApp:
                 await s.commit()
             await eng2.dispose()
             with pytest.raises(run_secrets.RedemptionRefused):
-                await run_secrets.redeem(ref, ["gitlab_token"])
+                await run_secrets.redeem(ref, ["forge_token"])
         finally:
             server.should_exit = True
             t.join(5)
