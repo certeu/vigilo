@@ -77,6 +77,21 @@ def open_artifact(data_dir: str, session_id: str, kind: str) -> tuple[BinaryIO, 
     return fh, rel, mimetypes.guess_type(rel)[0] or "application/octet-stream"
 
 
+def resolve_deliverable_file(data_dir: str, session_id: str, rel: str) -> str | None:
+    """Resolve a deliverable-relative path (e.g. ``screenshots/x.png``) safely.
+
+    Returns the absolute path if it exists and stays inside deliverables/, else None.
+    Used to serve report images (screenshots) that the report references relatively.
+    """
+    base = os.path.realpath(deliverables_dir(data_dir, session_id))
+    candidate = os.path.realpath(os.path.join(base, rel))
+    if candidate != base and not candidate.startswith(base + os.sep):
+        return None  # path traversal attempt
+    if not os.path.isfile(candidate):
+        return None
+    return candidate
+
+
 def available_artifacts(data_dir: str, session_id: str) -> list[str]:
     """Return the kinds whose files currently exist for this run."""
     found: list[str] = []
