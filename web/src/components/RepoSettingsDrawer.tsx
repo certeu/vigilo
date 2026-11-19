@@ -8,6 +8,19 @@ const CONFIG_FIELDS = [
   { key: "model_medium", label: "Model — medium" },
   { key: "model_large", label: "Model — large" },
 ];
+/** The global value a repository field falls back to; for an empty model, the worker's
+ *  own default for the effective executor, e.g. "worker default (claude-sonnet-5-5)". */
+function globalValue(d: ModelDefaults, key: string, repoExecutor?: string): string {
+  if (key === "executor") return d.executor || "worker default";
+  const executor = (repoExecutor || "").trim() || d.executor;
+  // Admin model names belong to the admin's executor: a repository on another executor
+  // does not inherit them (see build_model_overrides), so show that executor's default.
+  const v = (d as unknown as Record<string, string>)[key];
+  if (v && executor === d.executor) return v;
+  const fallback = d.worker_defaults?.[executor]?.[key];
+  return fallback ? `worker default (${fallback})` : "worker default";
+}
+
 const SCAN_FIELDS = [
   { key: "description", label: "Description / context" },
   { key: "focus", label: "Focus on" },
@@ -203,7 +216,7 @@ export function RepoSettingsDrawer({
             <div key={f.key} className="mb-3">
               <label htmlFor={`cfg-${f.key}`} className="mb-1 block text-sm text-slate">{f.label}</label>
               <input id={`cfg-${f.key}`} className="field" placeholder={
-                       defaults ? `global: ${defaults[f.key as keyof ModelDefaults] || "worker default"}` : "(use global default)"
+                       defaults ? `global: ${globalValue(defaults, f.key, cfg.executor)}` : "(use global default)"
                      }
                      value={cfg[f.key] ?? ""} onChange={(e) => setCfg({ ...cfg, [f.key]: e.target.value })} />
             </div>

@@ -56,7 +56,9 @@ class TestAdminConfigValidation:
     async def test_model_defaults_for_any_user(self, client, user_token):
         r = await client.get("/config/models", headers={"Authorization": f"Bearer {user_token}"})
         assert r.status_code == 200
-        assert set(r.json()) == {"executor", "model_small", "model_medium", "model_large"}
+        # Non-secret fields only: model names (global + the worker's fallbacks).
+        assert set(r.json()) == {"executor", "model_small", "model_medium", "model_large",
+                                 "worker_defaults"}
 
 
 class TestExecutorStatus:
@@ -80,3 +82,18 @@ class TestExecutorStatus:
         assert by["claude"]["configured"] is False
         assert "ANTHROPIC_API_KEY" in by["claude"]["missing"]
         assert by["opencode"]["configured"] is False
+
+
+class TestWorkerModelDefaults:
+    def test_env_overrides_builtin(self):
+        from src.webapi.routers.admin_config import worker_model_defaults
+        d = worker_model_defaults({"ANTHROPIC_MEDIUM_MODEL": "claude-sonnet-5-5"})
+        assert d["claude"]["model_medium"] == "claude-sonnet-5-5"
+        assert d["claude"]["model_small"]  # built-in default, never empty
+        assert set(d) >= {"claude", "codex", "opencode"}
+
+    async def test_endpoint_returns_worker_defaults(self, client, user_token, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_LARGE_MODEL", "claude-opus-5-5")
+        r = await client.get("/config/models", headers={"Authorization": f"Bearer {user_token}"})
+        assert r.status_code == 200, r.text
+        assert r.json()["worker_defaults"]["claude"]["model_large"] == "claude-opus-5-5"
