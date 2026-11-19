@@ -231,10 +231,13 @@ async def create_repository(
 
 @router.get("/repositories", response_model=list[RepositoryRead])
 async def list_repositories(
+    include_archived: bool = False,
     user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> list[RepositoryRead]:
-    allowed = await accessible_repo_ids(session, user)
+    """List repositories visible to the user. Archived repos are hidden unless
+    ``include_archived=true`` (used by the UI's "show archived" filter)."""
+    allowed = await accessible_repo_ids(session, user, include_archived=include_archived)
     rows = (await session.scalars(select(Repository))).all()
     return [_to_read(r) for r in rows if allowed is None or r.id in allowed]
 
@@ -329,6 +332,11 @@ async def update_repository(
         revalidate = True
     if data.get("is_private") is not None:
         repo.is_private = data["is_private"]
+    if data.get("archived") is not None:
+        # Soft hide/restore. _require_owner_or_admin deliberately ignores the
+        # archive flag so an archived repo can still be unarchived through this
+        # same endpoint.
+        repo.archived = data["archived"]
     if data.get("push_patches") is not None:
         if data["push_patches"] and repo.source_type != "gitlab":
             raise HTTPException(
