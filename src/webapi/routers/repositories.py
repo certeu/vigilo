@@ -20,7 +20,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.webapi.ingestion import (
@@ -45,9 +45,12 @@ from urllib.parse import urlparse
 from src.webapi.credential_guard import CredentialRejected, validate_gitlab_credential
 from src.webapi.models import (
     ROLE_ADMIN,
+    RUN_TERMINAL,
     Credential,
+    Job,
     Repository,
     RepositoryAccess,
+    Run,
     User,
 )
 from src.webapi.schemas import (
@@ -336,6 +339,22 @@ async def update_repository(
         # Soft hide/restore. _require_owner_or_admin deliberately ignores the
         # archive flag so an archived repo can still be unarchived through this
         # same endpoint.
+        if data["archived"]:
+            # Archiving hides the repo and every run under it (lists, dashboard
+            # and direct URLs all 404). Refuse while a run is still in flight so
+            # an active scan never disappears from view mid-run.
+            active = (await session.scalars(
+                select(func.count(Run.id))
+                .join(Job, Job.id == Run.job_id)
+                .where(Job.repository_id == repo.id,
+                       Run.status.notin_(RUN_TERMINAL))
+            )).one()
+            if active:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(f"Cannot archive: {active} run(s) still in "
+                            "progress on this repository"),
+                )
         repo.archived = data["archived"]
     if data.get("push_patches") is not None:
         if data["push_patches"] and repo.source_type != "gitlab":

@@ -82,3 +82,24 @@ class TestArchive:
         r = await client.patch(f"/repositories/{repo['id']}", headers=ha,
                                json={"archived": True})
         assert r.status_code == 200 and r.json()["archived"] is True
+
+    async def test_archive_blocked_while_run_in_progress(self, client, user_token, session_maker):
+        import uuid as _uuid  # noqa: F401
+        from src.webapi.models import Run, RUN_RUNNING
+        repo = await _repo(client, user_token)
+        h = {"Authorization": f"Bearer {user_token}"}
+        job = (await client.post("/jobs", headers=h, json={
+            "repository_id": repo["id"], "name": "j", "stage_preset": "vuln"})).json()
+        async with session_maker() as s:
+            s.add(Run(job_id=_uuid.UUID(job["id"]), session_id="s-guard",
+                      data_dir="/tmp/guard", status=RUN_RUNNING))
+            await s.commit()
+        # archiving is refused while the run is in flight
+        r = await client.patch(f"/repositories/{repo['id']}", headers=h,
+                               json={"archived": True})
+        assert r.status_code == 409
+        assert "in progress" in r.json()["detail"]
+        assert (await client.get(f"/repositories/{repo['id']}", headers=h)).json()["archived"] is False
+        # unarchiving never needs this check
+        assert (await client.patch(f"/repositories/{repo['id']}", headers=h,
+                                   json={"archived": False})).status_code == 200
