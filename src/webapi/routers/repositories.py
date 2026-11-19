@@ -133,6 +133,11 @@ def _deny_non_owner(user, repo, detail: str) -> None:
     raise HTTPException(status_code=403, detail=detail)
 
 
+def _supports_push(source_type: str) -> bool:
+    forge = get_forge(source_type)
+    return forge is not None and forge.supports_push
+
+
 async def _make_forge_credential(session, user, repo_name, source_type, remote_url, payload):
     """Encrypt a forge credential pasted with a repository (``gitlab_token``,
     ``github_token`` or ``github_app``) as a per-user credential bound to the forge
@@ -245,9 +250,10 @@ async def create_repository(
             validate_repo_credential(cred, user.id, payload.source_type, payload.remote_url)
         except CredentialRejected as exc:
             raise HTTPException(status_code=400, detail=str(exc))
-    if payload.push_patches and payload.source_type != "gitlab":
+    if payload.push_patches and not _supports_push(payload.source_type):
         raise HTTPException(status_code=400,
-                            detail="push_patches requires a GitLab source")
+                            detail="push_patches requires a forge source that supports it "
+                                   "(GitLab)")
     # A pasted credential is encrypted and linked to this repo.
     cred_id = await _make_forge_credential(
         session, user, payload.name, payload.source_type, payload.remote_url, payload,
@@ -383,7 +389,7 @@ async def update_repository(
     if data.get("is_private") is not None:
         repo.is_private = data["is_private"]
     if data.get("push_patches") is not None:
-        if data["push_patches"] and repo.source_type != "gitlab":
+        if data["push_patches"] and not _supports_push(repo.source_type):
             raise HTTPException(
                 status_code=400,
                 detail="push_patches requires a GitLab source with a write-scoped token",
@@ -540,7 +546,7 @@ async def issue_webhook(
 ) -> dict[str, str]:
     repo = await _require_owner_or_admin(session, user, repo_id)
     forge = get_forge(repo.source_type)
-    if forge is not None and forge.name != "gitlab":
+    if forge is not None and not forge.supports_webhooks:
         raise HTTPException(status_code=400,
                             detail=f"Webhooks are not supported for {forge.label} repositories yet")
     repo.webhook_secret = secrets.token_urlsafe(32)

@@ -164,10 +164,18 @@ class TestInstallationToken:
         assert (m2, u2) == ("POST", "https://ghe.example.com/api/v3/app/installations/99/access_tokens")
         assert body == {"repositories": ["app"], "permissions": {"contents": "read"}}
 
-    def test_configured_installation_skips_lookup(self, pem):
-        op = _Opener([{"token": "ghs_x"}])
+    def test_configured_installation_is_checked_against_the_owner(self, pem):
+        op = _Opener([{"id": 7, "account": {"login": "Acme"}}, {"token": "ghs_x"}])
         gh.installation_token(_secret(pem, "7"), "https://github.com/acme/app", opener=op)
-        assert [c[1] for c in op.calls] == ["https://api.github.com/app/installations/7/access_tokens"]
+        assert [c[1] for c in op.calls] == [
+            "https://api.github.com/app/installations/7",
+            "https://api.github.com/app/installations/7/access_tokens"]
+
+    def test_configured_installation_of_another_account_is_refused(self, pem):
+        op = _Opener([{"id": 7, "account": {"login": "someone-else"}}, {"token": "ghs_x"}])
+        with pytest.raises(gh.GitHubAppError, match="someone-else"):
+            gh.installation_token(_secret(pem, "7"), "https://github.com/acme/app", opener=op)
+        assert len(op.calls) == 1  # no token was minted
 
     def test_not_installed(self, pem):
         op = _Opener([_http_error(404)])
@@ -387,3 +395,8 @@ class TestPushNotYetForGitHub:
         from src.services.forges import get_forge
         assert get_forge("github").supports_push is False
         assert get_forge("gitlab").supports_push is True
+
+    def test_webhooks_follow_the_forge_flag(self):
+        from src.services.forges import get_forge
+        assert get_forge("github").supports_webhooks is False
+        assert get_forge("gitlab").supports_webhooks is True

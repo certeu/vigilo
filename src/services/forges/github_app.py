@@ -230,6 +230,17 @@ def installation_token(secret: str, repo_url: str, opener=None) -> str:
         inst = str(info.get("id") or "")
         if not _DIGITS.match(inst):
             raise GitHubAppError("the GitHub App is not installed on this repository")
+    else:
+        # A configured installation must belong to the repository's owner: the token
+        # request below names the repository without its owner, so an installation
+        # on another account would yield a token for a same-named repository there.
+        info = _api_request("GET", f"{api}/app/installations/{inst}", jwt, opener=opener)
+        account = str(((info.get("account") or {}).get("login")) or "")
+        if account.lower() != repo.owner.lower():
+            raise GitHubAppError(
+                f"the configured GitHub App installation {inst} belongs to "
+                f"{account or 'an unknown account'!r}, not to {repo.owner!r}"
+            )
     out = _api_request(
         "POST", f"{api}/app/installations/{inst}/access_tokens", jwt,
         body={"repositories": [repo.name], "permissions": {"contents": "read"}},

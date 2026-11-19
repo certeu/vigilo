@@ -647,7 +647,7 @@ async def _deliver_locked(
     except ValueError as exc:
         return finish("skipped", f"invalid repository URL: {exc}")
     if not run_secrets.has_reference(secrets):
-        return finish("skipped", "no GitLab credential available for this run")
+        return finish("skipped", "no repository credential available for this run")
 
     # Only push history that really descends from upstream: a rebuilt checkout, or the
     # API's clone that still contains the scanned commit.
@@ -697,15 +697,15 @@ async def _deliver_locked(
         token = redeemed.get("forge_token")
         del redeemed
     except run_secrets.RedemptionRefused:
-        return finish("skipped", "GitLab credential no longer available (run finished or revoked)")
+        return finish("skipped", "repository credential no longer available (run finished or revoked)")
     except run_secrets.RedemptionUnavailable as exc:
         for b in to_push:
             attempt[b]["push_error"] = f"credential service unavailable: {exc}"
             result["failed"].append(b)
         result["retryable"] = True   # transient: the activity lets Temporal retry (idempotent)
-        return finish("failed", "could not redeem the GitLab credential")
+        return finish("failed", "could not redeem the repository credential")
     if not token:
-        return finish("skipped", "no GitLab credential available for this run")
+        return finish("skipped", "no repository credential available for this run")
 
     try:
         _require_https_for_token(push_url)
