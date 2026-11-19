@@ -46,16 +46,39 @@ class CredentialCreate(BaseModel):
     kind: str
     label: str
     secret: str
+    # Forge credentials: the forge host the credential is bound to.
+    forge_base_url: str | None = None
+    # Deprecated name of ``forge_base_url``, still accepted.
     gitlab_base_url: str | None = None
+
+    @model_validator(mode="after")
+    def _forge_checks(self):
+        self.forge_base_url = _merge_alias(
+            self.forge_base_url, self.gitlab_base_url, "forge_base_url", "gitlab_base_url")
+        self.gitlab_base_url = None
+        from src.services.forges import forge_for_kind
+        forge = forge_for_kind(self.kind)
+        if forge is not None:
+            forge.check_credential_secret(self.kind, self.secret, self.forge_base_url)
+        return self
 
 
 class CredentialRead(BaseModel):
     id: uuid.UUID
     kind: str
     label: str
+    forge_base_url: str | None
+    # Deprecated: same value as ``forge_base_url``.
     gitlab_base_url: str | None
     created_at: datetime
     has_secret: bool
+
+
+def _merge_alias(new, old, new_name: str, old_name: str):
+    """A field and its deprecated alias: either may be given, not two different values."""
+    if old is not None and new is not None and old != new:
+        raise ValueError(f"{old_name} is a deprecated name of {new_name}; give only one")
+    return new if new is not None else old
 
 
 class AdminConfigRead(BaseModel):
@@ -133,34 +156,67 @@ class ExecutorStatusRead(BaseModel):
 _SCAN_KEYS = {"description", "focus", "avoid"}
 
 
+class GitHubAppIn(BaseModel):
+    """A GitHub App to clone with (stored encrypted as a ``github_app`` credential)."""
+
+    app_id: str
+    private_key: str
+    installation_id: str | None = None
+
+
+# source_type -> the token fields that belong to it
+_TOKEN_FIELDS = {"gitlab": ("gitlab_token",), "github": ("github_token", "github_app")}
+
+
+def _check_token_fields(source_type: str | None, values: dict) -> None:
+    """Token fields only for their own forge; at most one GitHub credential."""
+    given = [f for fields in _TOKEN_FIELDS.values() for f in fields if values.get(f)]
+    allowed = _TOKEN_FIELDS.get(source_type or "", ())
+    wrong = [f for f in given if f not in allowed]
+    if wrong:
+        raise ValueError(f"{', '.join(wrong)} does not apply to a {source_type!r} repository")
+    if len(given) > 1:
+        raise ValueError(f"give only one of {', '.join(given)}")
+
+
 class RepositoryCreate(BaseModel):
     name: str
-    source_type: Literal["upload", "gitlab"]
+    source_type: Literal["upload", "gitlab", "github"]
+    # Forge sources: the repository URL (GitLab project or GitHub repository).
+    remote_url: str | None = None
+    forge_project_id: str | None = None
+    # Deprecated names of ``remote_url`` / ``forge_project_id``, still accepted.
     gitlab_url: str | None = None
     gitlab_project_id: str | None = None
     default_credential_id: uuid.UUID | None = None
     is_private: bool = False
     scan_config: dict = {}
-    # Convenience for the UI: a GitLab access token pasted at create time. The
-    # server encrypts it as a per-user credential and links it as this repo's
-    # default_credential_id (never stored in the clear). Use a write-scoped token
-    # if you also enable push_patches.
+    # Convenience for the UI: a forge credential pasted at create time. The server
+    # encrypts it as a per-user credential bound to the forge host and links it as
+    # this repo's default_credential_id (never stored in the clear). Use a
+    # write-scoped GitLab token if you also enable push_patches.
     gitlab_token: str | None = None
+    github_token: str | None = None
+    github_app: GitHubAppIn | None = None
     push_patches: bool = False
 
     @model_validator(mode="after")
-    def _gitlab_needs_url(self):
-        if self.source_type == "gitlab":
-            if not self.gitlab_url:
-                raise ValueError("gitlab_url is required when source_type='gitlab'")
-            # Reject non-web schemes up front (file://, ext::, ssh://, …) — otherwise a
-            # user could point the clone at a local repo or an internal host (SSRF/LFI).
-            from urllib.parse import urlparse
-            scheme = (urlparse(self.gitlab_url).scheme or "https").lower()
-            if scheme not in ("https", "http"):
-                raise ValueError(f"gitlab_url must be an http(s) URL (got {scheme!r})")
-            from src.webapi.ingestion import reject_embedded_credentials
-            reject_embedded_credentials(self.gitlab_url)
+    def _forge_needs_url(self):
+        self.remote_url = _merge_alias(self.remote_url, self.gitlab_url,
+                                       "remote_url", "gitlab_url")
+        self.forge_project_id = _merge_alias(self.forge_project_id, self.gitlab_project_id,
+                                             "forge_project_id", "gitlab_project_id")
+        self.gitlab_url = self.gitlab_project_id = None
+        _check_token_fields(self.source_type, {
+            "gitlab_token": self.gitlab_token, "github_token": self.github_token,
+            "github_app": self.github_app,
+        })
+        from src.services.forges import get_forge
+        forge = get_forge(self.source_type)
+        if forge is not None:
+            if not self.remote_url:
+                raise ValueError(f"remote_url is required when source_type={self.source_type!r}")
+            forge.check_remote_url(self.remote_url)
         return self
 
     @field_validator("scan_config")
@@ -177,6 +233,10 @@ class RepositoryRead(BaseModel):
     created_by: uuid.UUID
     name: str
     source_type: str
+    forge: str | None = None
+    remote_url: str | None
+    forge_project_id: str | None
+    # Deprecated: same values as ``remote_url`` / ``forge_project_id``.
     gitlab_url: str | None
     gitlab_project_id: str | None
     default_credential_id: uuid.UUID | None
@@ -211,8 +271,11 @@ class RepositoryUpdate(BaseModel):
     push_patches: bool | None = None
     pipeline_config: dict | None = None
     scan_config: dict | None = None
-    # Add/replace the GitLab access token (encrypted as a new credential + linked).
+    # Add/replace the repository's forge credential (encrypted as a new credential
+    # and linked); only the field of the repository's own forge applies.
     gitlab_token: str | None = None
+    github_token: str | None = None
+    github_app: GitHubAppIn | None = None
 
     @field_validator("pipeline_config")
     @classmethod

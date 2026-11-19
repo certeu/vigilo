@@ -4,7 +4,7 @@ import types
 
 import pytest
 
-from src.webapi.ingestion import validate_gitlab_access
+from src.webapi.ingestion import validate_remote_access
 from tests.webapi.conftest import _make_user, _token
 
 PW = "Passw0rd!123"
@@ -19,13 +19,13 @@ def _fake_runner(returncode=0, stdout="", stderr=""):
 class TestValidateGitlabAccess:
     def test_success_returns_ref_count(self):
         runner = _fake_runner(0, "abc123\trefs/heads/main\ndef456\trefs/heads/dev\n")
-        assert validate_gitlab_access("https://gl.example.com/g/p.git", "glpat-x", runner) == 2
+        assert validate_remote_access("https://gl.example.com/g/p.git", "glpat-x", runner) == 2
 
     def test_failure_raises_and_scrubs_token(self):
         # stderr echoes the tokenized URL; the raised message must not leak the token.
         runner = _fake_runner(128, stderr="fatal: could not read from https://oauth2:glpat-SECRET@gl/p.git")
         with pytest.raises(RuntimeError) as ei:
-            validate_gitlab_access("https://gl.example.com/g/p.git", "glpat-SECRET", runner)
+            validate_remote_access("https://gl.example.com/g/p.git", "glpat-SECRET", runner)
         assert "glpat-SECRET" not in str(ei.value)
 
 
@@ -47,10 +47,10 @@ class TestGitUrlSchemeAllowlist:
             build_clone_url("http://gl.internal/g/p.git", "tok")
         assert build_clone_url("http://gl.internal/g/p.git", "").startswith("http://")
 
-    def test_validate_gitlab_access_rejects_file_scheme(self):
-        from src.webapi.ingestion import validate_gitlab_access
+    def test_validate_remote_access_rejects_file_scheme(self):
+        from src.webapi.ingestion import validate_remote_access
         with pytest.raises(ValueError):
-            validate_gitlab_access("file:///srv/secret.git", None, _fake_runner(0))
+            validate_remote_access("file:///srv/secret.git", None, _fake_runner(0))
 
     async def test_create_gitlab_repo_with_file_url_is_422(self, client, session_maker):
         await _make_user(session_maker, "u@example.com", PW, "user")

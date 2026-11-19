@@ -27,7 +27,7 @@ export function RepoSettingsDrawer({
 }) {
   const [isPrivate, setIsPrivate] = useState(repo.is_private);
   const [pushPatches, setPushPatches] = useState(repo.push_patches);
-  const [gitlabToken, setGitlabToken] = useState("");
+  const [forgeToken, setForgeToken] = useState("");
   const [cfg, setCfg] = useState<Record<string, string>>({ ...repo.pipeline_config });
   const [scan, setScan] = useState<Record<string, string>>({ ...repo.scan_config });
   const [grants, setGrants] = useState<AccessGrant[]>([]);
@@ -60,10 +60,14 @@ export function RepoSettingsDrawer({
         push_patches: pushPatches,
         pipeline_config: clean(cfg),
         scan_config: clean(scan),
-        ...(gitlabToken ? { gitlab_token: gitlabToken } : {}),
+        ...(forgeToken
+          ? repo.source_type === "github"
+            ? { github_token: forgeToken }
+            : { gitlab_token: forgeToken }
+          : {}),
       });
-      setGitlabToken("");
-      setMsg(gitlabToken ? "Saved — verifying token…" : "Saved");
+      setForgeToken("");
+      setMsg(forgeToken ? "Saved — verifying token…" : "Saved");
       onSaved();
       setTimeout(() => setMsg(null), 1500);
     } catch (e) {
@@ -141,6 +145,30 @@ export function RepoSettingsDrawer({
           </section>
         )}
 
+        {repo.source_type === "github" && (
+          <section className="mb-6">
+            <label htmlFor="gh-token" className="mb-1 block text-sm text-slate">
+              Personal access token {repo.ingestion_status === "ready" ? "(set — paste to replace)" : ""}
+            </label>
+            <input
+              id="gh-token"
+              className="field"
+              type="password"
+              autoComplete="off"
+              placeholder="ghp_… / github_pat_…"
+              value={forgeToken}
+              onChange={(e) => setForgeToken(e.target.value)}
+            />
+            <p className="mt-1 text-xs text-slate">
+              Used to <b>clone</b> this repository. Stored encrypted. Saving verifies access
+              against the host and resolves to a clear valid/invalid state.
+              {repo.ingestion_status === "failed" && repo.ingestion_error
+                ? ` Last check failed: ${repo.ingestion_error}`
+                : ""}
+            </p>
+          </section>
+        )}
+
         {repo.source_type === "gitlab" && (
           <section className="mb-6">
             <label className="flex items-center gap-3">
@@ -165,8 +193,8 @@ export function RepoSettingsDrawer({
                 type="password"
                 autoComplete="off"
                 placeholder="glpat-…"
-                value={gitlabToken}
-                onChange={(e) => setGitlabToken(e.target.value)}
+                value={forgeToken}
+                onChange={(e) => setForgeToken(e.target.value)}
               />
               <p className="mt-1 text-xs text-slate">
                 Used to <b>clone</b> this repository. Stored encrypted. Saving verifies access

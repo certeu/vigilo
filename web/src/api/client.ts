@@ -52,7 +52,9 @@ export interface Repository {
   created_by: string;
   name: string;
   source_type: string;
-  gitlab_url: string | null;
+  forge?: string | null;
+  remote_url: string | null;
+  forge_project_id?: string | null;
   has_webhook: boolean;
   is_private: boolean;
   upload_ready: boolean;
@@ -90,9 +92,9 @@ export interface Job {
 }
 export interface Credential {
   id: string;
-  kind: "gitlab_token" | "cookie_header" | string;
+  kind: "gitlab_token" | "github_token" | "github_app" | "cookie_header" | string;
   label: string;
-  gitlab_base_url: string | null;
+  forge_base_url: string | null;
   created_at: string;
   has_secret: boolean;
 }
@@ -217,7 +219,9 @@ export const api = {
   },
   me: () => request<User>("/users/me"),
   repositories: () => request<Repository[]>("/repositories"),
-  createRepository: (body: Partial<Repository> & { gitlab_token?: string; push_patches?: boolean }) =>
+  createRepository: (
+    body: Partial<Repository> & { gitlab_token?: string; github_token?: string; push_patches?: boolean },
+  ) =>
     request<Repository>("/repositories", { method: "POST", body: JSON.stringify(body) }),
   deleteRepository: (id: string) =>
     request<void>(`/repositories/${id}`, { method: "DELETE" }),

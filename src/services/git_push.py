@@ -693,8 +693,8 @@ async def _deliver_locked(
         # The cookie (when the run had one) is redeemed too, only so that it is
         # registered for masking: evidence write-ups can quote it and must not reach
         # the merge request. It is never used here.
-        redeemed = await run_secrets.redeem(secrets, ["gitlab_token", "cookie_header"])
-        token = redeemed.get("gitlab_token")
+        redeemed = await run_secrets.redeem(secrets, ["forge_token", "cookie_header"])
+        token = redeemed.get("forge_token")
         del redeemed
     except run_secrets.RedemptionRefused:
         return finish("skipped", "GitLab credential no longer available (run finished or revoked)")

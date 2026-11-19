@@ -25,7 +25,7 @@ class TestMigrations:
         assert "archived" in cols
         with eng.connect() as c:
             ver = c.execute(sa.text("SELECT version_num FROM alembic_version")).scalar()
-        assert ver == "0008_run_secrets_job_cookie"
+        assert ver == "0009_generic_forge_fields"
 
     def test_upgrade_is_idempotent(self, tmp_path):
         from scripts.run_migrations import build_config
