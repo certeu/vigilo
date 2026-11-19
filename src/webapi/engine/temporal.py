@@ -12,6 +12,7 @@ re-attaches rather than fails on restart).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 
@@ -82,22 +83,30 @@ class TemporalEngine:
             tree = upload_tree_dir(settings.uploads_dir, str(repo.id))
             upload_path = archive if os.path.isfile(archive) else tree
         run.status = RUN_PREPARING
-        prepare_repo(
-            source_type=repo.source_type, repo_dir=repo_dir,
-            upload_path=upload_path, gitlab_url=repo.gitlab_url, token=token,
-        )
-        # Commit SHA + persistent browse-only file tree (best-effort).
-        capture_source_info(run, repo, repo_dir)
-        # The API writes the checkout as root; the worker runs as a different uid on
-        # the shared volume. Make the run dir writable so the worker can create
-        # .vigilo/ outputs inside it.
-        for base, dirs, fnames in os.walk(run.data_dir):
-            try:
-                os.chmod(base, 0o777)
-                for f in fnames:
-                    os.chmod(os.path.join(base, f), 0o666)
-            except OSError:
-                pass
+
+        def _materialize_and_capture() -> None:
+            prepare_repo(
+                source_type=repo.source_type, repo_dir=repo_dir,
+                upload_path=upload_path, gitlab_url=repo.gitlab_url, token=token,
+            )
+            # Commit SHA + persistent browse-only file tree (best-effort).
+            capture_source_info(run, repo, repo_dir)
+            # The API writes the checkout as root; the worker runs as a different uid on
+            # the shared volume. Make the run dir writable so the worker can create
+            # .vigilo/ outputs inside it.
+            for base, dirs, fnames in os.walk(run.data_dir):
+                try:
+                    os.chmod(base, 0o777)
+                    for f in fnames:
+                        os.chmod(os.path.join(base, f), 0o666)
+                except OSError:
+                    pass
+
+        # Cloning or extracting a repository is a blocking subprocess operation
+        # that can take minutes on a large source. Run it in a worker thread:
+        # inline, the event loop stalls and the whole API stops answering until
+        # the run has started.
+        await asyncio.to_thread(_materialize_and_capture)
 
         # Everything per-run that is not a secret goes into the workflow input; the
         # GitLab token (push) and the job's cookie header are stored as an encrypted
