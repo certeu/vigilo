@@ -139,10 +139,21 @@ class TemporalEngine:
             return
         try:
             client = await self._client()
-            await client.get_workflow_handle(run.workflow_id).terminate(
-                reason="cancelled via platform"
-            )
+            handle = client.get_workflow_handle(run.workflow_id)
+            # cancel() (not terminate()): delivers a cancellation to the running
+            # activity, which raises CancelledError inside the executor — its
+            # finally kills the whole opencode process group. terminate() would
+            # leave the in-flight activity (and its agent subprocess) running
+            # until the heartbeat timeout, keeping zombie LLM requests alive.
+            await handle.cancel(reason="cancelled via platform")
+            # Belt-and-braces: if the workflow somehow survives the cancel
+            # request (e.g. it is between activities), terminate it outright so
+            # no further activity gets scheduled.
+            try:
+                await handle.terminate(reason="cancelled via platform (post-cancel)")
+            except Exception:
+                pass
         except Exception as exc:  # pragma: no cover
-            logger.warning("terminate failed for %s: %s", run.id, exc)
+            logger.warning("cancel failed for %s: %s", run.id, exc)
         await drop_run_secrets(run)
         run.status = RUN_CANCELLED

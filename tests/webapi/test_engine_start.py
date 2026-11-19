@@ -150,6 +150,7 @@ class TestTemporalEngine:
         engine = TemporalEngine()
         handle = MagicMock()
         handle.describe = AsyncMock(return_value=SimpleNamespace(status=SimpleNamespace(value=2)))
+        handle.cancel = AsyncMock()
         handle.terminate = AsyncMock()
         client = MagicMock()
         client.get_workflow_handle = MagicMock(return_value=handle)
@@ -161,6 +162,8 @@ class TestTemporalEngine:
         await engine.cancel(run)
         assert run.status == "cancelled"
         client.get_workflow_handle.assert_called_with("sess-abc123")
+        handle.cancel.assert_awaited_once()
+        # belt-and-braces: terminate is still awaited after the cancel request
         handle.terminate.assert_awaited_once()
 
     async def test_push_patches_sends_flags_and_a_reference_only(
