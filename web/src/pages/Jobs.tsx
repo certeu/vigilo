@@ -33,6 +33,7 @@ export function Jobs() {
   const [tuning, setTuning] = useState<Record<string, string>>({});
   const [retryPreset, setRetryPreset] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [starting, setStarting] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<Job | null>(null);
 
   async function load() {
@@ -85,8 +86,16 @@ export function Jobs() {
   }
 
   async function run(jobId: string) {
-    const r = await api.runJob(jobId);
-    navigate(`/runs/${r.id}`);
+    setError(null);
+    setStarting(jobId);
+    try {
+      const r = await api.runJob(jobId);
+      navigate(`/runs/${r.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start the run");
+    } finally {
+      setStarting(null);
+    }
   }
 
   async function setJobCredential(job: Job, value: string) {
@@ -235,8 +244,9 @@ export function Jobs() {
                   ))}
                 </select>
               )}
-              <button className="btn-ghost" onClick={() => run(j.id)}>
-                Run
+              <button className="btn-ghost" onClick={() => void run(j.id)}
+                      disabled={starting !== null}>
+                {starting === j.id ? "Starting…" : "Run"}
               </button>
               <button
                 className="text-slate hover:text-severity-critical"
