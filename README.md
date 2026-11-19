@@ -532,7 +532,9 @@ that host:
 - `github_app`: a GitHub App (`{"app_id", "private_key", "installation_id"?}`, via the API as
   `github_app` on `POST /repositories`, or `POST /credentials` with `forge_base_url`). Each time
   access is needed, Vigilo mints a short-lived installation token limited to that one
-  repository and `contents: read`; it is never stored.
+  repository and `contents: read`; it is never stored. A fixed `installation_id` must be the
+  App's installation on the repository's owner (organisation or user); leave it empty to have
+  Vigilo look up the installation for the repository.
 
 Pushing fixes back and webhooks are GitLab only for now.
 

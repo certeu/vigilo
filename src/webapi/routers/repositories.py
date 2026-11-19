@@ -124,6 +124,10 @@ async def _require_owner_or_admin(session, user, repo_id) -> Repository:
     return repo
 
 
+_PUSH_UNSUPPORTED = ("push_patches requires a forge source that supports it (GitLab) "
+                     "with a write-scoped token")
+
+
 def _supports_push(source_type: str) -> bool:
     forge = get_forge(source_type)
     return forge is not None and forge.supports_push
@@ -243,8 +247,7 @@ async def create_repository(
             raise HTTPException(status_code=400, detail=str(exc))
     if payload.push_patches and not _supports_push(payload.source_type):
         raise HTTPException(status_code=400,
-                            detail="push_patches requires a forge source that supports it "
-                                   "(GitLab)")
+                            detail=_PUSH_UNSUPPORTED)
     # A pasted credential is encrypted and linked to this repo.
     cred_id = await _make_forge_credential(
         session, user, payload.name, payload.source_type, payload.remote_url, payload,
@@ -383,7 +386,7 @@ async def update_repository(
         if data["push_patches"] and not _supports_push(repo.source_type):
             raise HTTPException(
                 status_code=400,
-                detail="push_patches requires a GitLab source with a write-scoped token",
+                detail=_PUSH_UNSUPPORTED,
             )
         repo.push_patches = data["push_patches"]
     if data.get("pipeline_config") is not None:
