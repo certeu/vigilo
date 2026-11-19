@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { TrashIcon } from "@heroicons/react/24/outline";
+import { StopCircleIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { api, type Job, type Repository, type Run } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { StatusDot } from "../components/StatusDot";
@@ -33,6 +33,15 @@ export function RunsList() {
     await api.deleteRun(run.id);  // cancels first if still active, frees disk
     setConfirm(null);
     await load();
+  }
+
+  async function cancel(run: Run) {
+    try {
+      await api.cancelRun(run.id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to cancel the run");
+    }
   }
 
   return (
@@ -83,9 +92,18 @@ export function RunsList() {
                     {run.started_at ? new Date(run.started_at).toLocaleString() : "—"}
                   </td>
                   <td className="px-4 py-3 text-right">
+                    {!["succeeded", "failed", "cancelled"].includes(run.status) && (
+                      <button
+                        className="mr-3 text-slate hover:text-severity-high"
+                        title="Cancel run (stops the scan, keeps the record)"
+                        onClick={() => void cancel(run)}
+                      >
+                        <StopCircleIcon className="h-4 w-4" />
+                      </button>
+                    )}
                     <button
                       className="text-slate hover:text-severity-critical"
-                      title="Delete run"
+                      title="Delete run (stops it if running, removes the record and its files)"
                       onClick={() => setConfirm(run)}
                     >
                       <TrashIcon className="h-4 w-4" />
