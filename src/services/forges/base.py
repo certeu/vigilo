@@ -58,6 +58,8 @@ class Forge(ABC):
     credential_kinds: tuple[str, ...]
     #: remediation can push fix branches and open change requests here
     supports_push: bool = False
+    #: change-request webhooks can trigger runs (see routers/webhooks.py)
+    supports_webhooks: bool = False
 
     @abstractmethod
     def check_remote_url(self, url: str) -> None:

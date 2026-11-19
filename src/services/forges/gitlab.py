@@ -14,6 +14,7 @@ class GitLabForge(Forge):
     clone_username = "oauth2"
     credential_kinds = (GITLAB_TOKEN_KIND,)
     supports_push = True
+    supports_webhooks = True
 
     def check_remote_url(self, url: str) -> None:
         # Reject non-web schemes (file://, ext::, ssh://, …): otherwise a user could

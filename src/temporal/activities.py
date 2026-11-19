@@ -1335,7 +1335,7 @@ async def rebuild_git(input: ActivityInput) -> dict[str, Any]:
                 try:
                     token = (await run_secrets.redeem(input.secrets, ["forge_token"])).get("forge_token")
                 except (run_secrets.RedemptionRefused, run_secrets.RedemptionUnavailable) as exc:
-                    logger.warning("Git rebuild: GitLab credential not available (%s)", exc)
+                    logger.warning("Git rebuild: repository credential not available (%s)", exc)
             return await rebuild_git_from_remote(
                 input.repo_path, remote_url=src.get("remote_url"),
                 commit=src.get("commit"), token=token,
@@ -1408,7 +1408,7 @@ async def deliver_patches(input: ActivityInput) -> dict[str, Any]:
             # The platform's internal API was unreachable: retrying is safe because
             # delivery is idempotent (already-pushed branches are skipped).
             raise ApplicationError(
-                "Could not reach the platform to redeem the GitLab credential",
+                "Could not reach the platform to redeem the repository credential",
                 type="SecretServiceUnavailable", non_retryable=False,
             )
         return result
