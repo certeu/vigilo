@@ -2,8 +2,11 @@
 without deleting anything; unarchiving restores full visibility."""
 from __future__ import annotations
 
+import pytest
+
 from tests.webapi.conftest import _make_user, _token
-from src.webapi.models import ROLE_USER
+from src.webapi.models import (ROLE_USER, RUN_PREPARING, RUN_QUEUED,
+                               RUN_RUNNING)
 
 
 async def _repo(client, token, name="repo-a"):
@@ -83,16 +86,17 @@ class TestArchive:
                                json={"archived": True})
         assert r.status_code == 200 and r.json()["archived"] is True
 
-    async def test_archive_blocked_while_run_in_progress(self, client, user_token, session_maker):
+    @pytest.mark.parametrize("run_status", [RUN_QUEUED, RUN_PREPARING, RUN_RUNNING])
+    async def test_archive_blocked_while_run_in_progress(self, client, user_token, session_maker, run_status):
         import uuid as _uuid  # noqa: F401
-        from src.webapi.models import Run, RUN_RUNNING
+        from src.webapi.models import Run
         repo = await _repo(client, user_token)
         h = {"Authorization": f"Bearer {user_token}"}
         job = (await client.post("/jobs", headers=h, json={
             "repository_id": repo["id"], "name": "j", "stage_preset": "vuln"})).json()
         async with session_maker() as s:
             s.add(Run(job_id=_uuid.UUID(job["id"]), session_id="s-guard",
-                      data_dir="/tmp/guard", status=RUN_RUNNING))
+                      data_dir="/tmp/guard", status=run_status))
             await s.commit()
         # archiving is refused while the run is in flight
         r = await client.patch(f"/repositories/{repo['id']}", headers=h,
