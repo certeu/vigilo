@@ -21,6 +21,7 @@ from src.webapi.reports import (
     build_bundle_zip,
     build_patches_zip,
     read_report,
+    open_report_image,
 )
 
 router = APIRouter(tags=["reports"])
@@ -43,6 +44,37 @@ async def get_report(
     run = await _run_or_404(run_id, session, user)
     markdown = read_report(run.data_dir, run.session_id)
     return {"exists": markdown is not None, "markdown": markdown or ""}
+
+
+@router.get("/runs/{run_id}/files/{rel_path:path}")
+async def get_run_file(
+    run_id: uuid.UUID,
+    rel_path: str,
+    user: User = Depends(current_active_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> StreamingResponse:
+    """Serve a report screenshot (a raster image under deliverables/screenshots/).
+
+    Uses the normal Bearer auth: the UI fetches screenshots itself and shows them
+    as blob URLs, so the session token never appears in a URL or an access log.
+    Symlinks and anything outside screenshots/ are rejected."""
+    run = await _run_or_404(run_id, session, user)
+    opened = open_report_image(run.data_dir, run.session_id, rel_path)
+    if opened is None:
+        raise HTTPException(status_code=404, detail="File not found")
+    fh, media_type = opened
+    return StreamingResponse(
+        _iter_file(fh), media_type=media_type,
+        headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"},
+    )
+
+
+def _iter_file(fh):
+    try:
+        while chunk := fh.read(64 * 1024):
+            yield chunk
+    finally:
+        fh.close()
 
 
 @router.get("/runs/{run_id}/artifacts")
