@@ -36,6 +36,7 @@ export function Login() {
               id="email"
               className="field"
               type="email"
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoFocus
@@ -48,6 +49,7 @@ export function Login() {
               id="password"
               className="field"
               type="password"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
