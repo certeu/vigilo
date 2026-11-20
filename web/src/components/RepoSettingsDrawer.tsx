@@ -4,6 +4,7 @@ import { api, type AccessGrant, type ModelDefaults, type Repository } from "../a
 
 const CONFIG_FIELDS = [
   { key: "executor", label: "Executor (claude / codex / opencode)" },
+  { key: "max_concurrent_pipelines", label: "Max parallel agents (1-32, empty = global default)" },
   { key: "model_small", label: "Model — small" },
   { key: "model_medium", label: "Model — medium" },
   { key: "model_large", label: "Model — large" },
@@ -203,7 +204,9 @@ export function RepoSettingsDrawer({
             <div key={f.key} className="mb-3">
               <label htmlFor={`cfg-${f.key}`} className="mb-1 block text-sm text-slate">{f.label}</label>
               <input id={`cfg-${f.key}`} className="field" placeholder={
-                       defaults ? `global: ${defaults[f.key as keyof ModelDefaults] || "worker default"}` : "(use global default)"
+                       f.key === "max_concurrent_pipelines" && defaults
+                         ? `global: ${defaults.default_max_concurrent_pipelines}`
+                         : defaults ? `global: ${defaults[f.key as keyof ModelDefaults] || "worker default"}` : "(use global default)"
                      }
                      value={cfg[f.key] ?? ""} onChange={(e) => setCfg({ ...cfg, [f.key]: e.target.value })} />
             </div>

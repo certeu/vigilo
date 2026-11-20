@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { TrashIcon } from "@heroicons/react/24/outline";
-import { api, type Credential, type Job, type Repository } from "../api/client";
+import { api, type Credential, type Job, type ModelDefaults, type Repository } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 
 const PRESETS = [
@@ -31,6 +31,7 @@ export function Jobs() {
   const [credentialId, setCredentialId] = useState("");
   const [notifyEmail, setNotifyEmail] = useState(false);
   const [tuning, setTuning] = useState<Record<string, string>>({});
+  const [modelDefaults, setModelDefaults] = useState<ModelDefaults | null>(null);
   const [retryPreset, setRetryPreset] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
@@ -53,6 +54,7 @@ export function Jobs() {
   }
   useEffect(() => {
     void load();
+    api.modelDefaults().then(setModelDefaults).catch(() => setModelDefaults(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -197,7 +199,7 @@ export function Jobs() {
                   type="number"
                   min={t.min}
                   max={t.max}
-                  placeholder="Default"
+                  placeholder={t.key === "max_concurrent_pipelines" && modelDefaults ? `global: ${modelDefaults.default_max_concurrent_pipelines}` : "Default"}
                   value={tuning[t.key] ?? ""}
                   onChange={(e) => setTuning({ ...tuning, [t.key]: e.target.value })}
                 />

@@ -56,7 +56,18 @@ class TestAdminConfigValidation:
     async def test_model_defaults_for_any_user(self, client, user_token):
         r = await client.get("/config/models", headers={"Authorization": f"Bearer {user_token}"})
         assert r.status_code == 200
-        assert set(r.json()) == {"executor", "model_small", "model_medium", "model_large"}
+        assert set(r.json()) == {"executor", "model_small", "model_medium", "model_large",
+                             "default_max_concurrent_pipelines"}
+        assert isinstance(r.json()["default_max_concurrent_pipelines"], int)
+
+
+    async def test_model_defaults_reflects_admin_concurrency(self, client, admin_token, user_token):
+        r = await client.put("/admin/config", headers={"Authorization": f"Bearer {admin_token}"},
+                             json={"default_max_concurrent_pipelines": 3})
+        assert r.status_code == 200
+        r2 = await client.get("/config/models", headers={"Authorization": f"Bearer {user_token}"})
+        assert r2.status_code == 200
+        assert r2.json()["default_max_concurrent_pipelines"] == 3
 
 
 class TestExecutorStatus:
