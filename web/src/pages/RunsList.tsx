@@ -11,6 +11,7 @@ export function RunsList() {
   const [repos, setRepos] = useState<Record<string, Repository>>({});
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<Run | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState<Run | null>(null);
 
   async function load() {
     try {
@@ -36,6 +37,7 @@ export function RunsList() {
   }
 
   async function cancel(run: Run) {
+    setConfirmCancel(null);
     try {
       await api.cancelRun(run.id);
       await load();
@@ -96,7 +98,7 @@ export function RunsList() {
                       <button
                         className="mr-3 text-slate hover:text-severity-high"
                         title="Cancel run (stops the scan, keeps the record)"
-                        onClick={() => void cancel(run)}
+                        onClick={() => setConfirmCancel(run)}
                       >
                         <StopCircleIcon className="h-4 w-4" />
                       </button>
@@ -137,6 +139,20 @@ export function RunsList() {
           }
           onConfirm={() => remove(confirm)}
           onCancel={() => setConfirm(null)}
+        />
+      )}
+
+      {confirmCancel && (
+        <ConfirmDialog
+          title="Cancel run"
+          body={
+            <>
+              This stops the scan; the run and its results so far are kept. A
+              cancelled scan cannot be restarted.
+            </>
+          }
+          onConfirm={() => void cancel(confirmCancel)}
+          onCancel={() => setConfirmCancel(null)}
         />
       )}
     </div>
