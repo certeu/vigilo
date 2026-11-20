@@ -144,12 +144,12 @@ export function RunsList() {
 
       {confirmCancel && (
         <ConfirmDialog
-          title="Stop run"
-          confirmLabel="Stop"
+          title="Cancel run"
+          confirmLabel="Cancel"
           body={
             <>
-              This stops the scan; the run and its results so far are kept. A
-              stopped scan cannot be restarted.
+              This cancels the scan; the run and its results so far are kept. A
+              cancelled scan cannot be restarted.
             </>
           }
           onConfirm={() => void cancel(confirmCancel)}
