@@ -107,3 +107,40 @@ class TestArchive:
         # unarchiving never needs this check
         assert (await client.patch(f"/repositories/{repo['id']}", headers=h,
                                    json={"archived": False})).status_code == 200
+
+    async def test_archived_repo_404_for_direct_access_and_jobs_list(
+        self, client, user_token
+    ):
+        """An archived repo must be invisible like a private one (404, no leak)."""
+        repo = await _repo(client, user_token)
+        h = {"Authorization": f"Bearer {user_token}"}
+        job = (await client.post("/jobs", headers=h, json={
+            "repository_id": repo["id"], "name": "j", "stage_preset": "vuln"})).json()
+        # archive
+        r = await client.patch(f"/repositories/{repo['id']}", headers=h,
+                               json={"archived": True})
+        assert r.status_code == 200
+        # direct GET -> 404, list hides it, jobs list hides its jobs
+        assert (await client.get(f"/repositories/{repo['id']}", headers=h)).status_code == 404
+        listing = (await client.get("/repositories", headers=h)).json()
+        assert all(x["id"] != repo["id"] for x in listing)
+        jobs = (await client.get("/jobs", headers=h)).json()
+        assert all(j["id"] != job["id"] for j in jobs)
+        # include_archived=true brings it back in the list
+        listing_all = (await client.get("/repositories?include_archived=true", headers=h)).json()
+        assert any(x["id"] == repo["id"] and x["archived"] for x in listing_all)
+
+    async def test_other_user_cannot_see_archived_public_repo(
+        self, client, user_token, session_maker
+    ):
+        """Even a non-private (team-visible) repo disappears for other users once archived."""
+        repo = await _repo(client, user_token, "shared")
+        other = await _other_user(client, session_maker)
+        ho = {"Authorization": f"Bearer {other}"}
+        h = {"Authorization": f"Bearer {user_token}"}
+        # visible before archiving (public repo)
+        assert any(x["id"] == repo["id"] for x in (await client.get("/repositories", headers=ho)).json())
+        await client.patch(f"/repositories/{repo['id']}", headers=h, json={"archived": True})
+        # hidden for the other user, and direct access 404s
+        assert all(x["id"] != repo["id"] for x in (await client.get("/repositories", headers=ho)).json())
+        assert (await client.get(f"/repositories/{repo['id']}", headers=ho)).status_code == 404
