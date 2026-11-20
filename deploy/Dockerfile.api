@@ -3,6 +3,17 @@ WORKDIR /app
 # git: needed to clone GitLab repositories during ingestion.
 RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
+# Report export fonts (DOCX/PDF): DejaVu Sans for body text + DejaVu Sans Mono
+# for code blocks, rendered by src/webapi/report_export.py. Debian splits the
+# faces across packages: core = Sans/Bold/Oblique, mono = SansMono (the extra
+# flags/emoji package is not needed). Version is pinned so an image rebuild
+# cannot silently change the glyphs the PDF exports.
+ARG DEJAVU_VERSION=2.37-8
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      "fonts-dejavu-core=${DEJAVU_VERSION}" "fonts-dejavu-mono=${DEJAVU_VERSION}" \
+    && test -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \
+    && test -f /usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf \
+    && rm -rf /var/lib/apt/lists/*
 COPY pyproject.toml ./
 COPY src ./src
 COPY scripts ./scripts
