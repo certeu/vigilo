@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from fastapi_users.password import PasswordHelper
+from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy import select
 
 from src.webapi.db import _session_maker
@@ -9,15 +10,24 @@ from src.webapi.models import ROLE_ADMIN, AdminConfig, User
 from src.webapi.settings import get_settings
 
 
+_EMAIL_ADAPTER = TypeAdapter(EmailStr)
+
+
 async def create_first_admin() -> None:
     s = get_settings()
-    if not (s.first_admin_email and s.first_admin_password):
+    email = (s.first_admin_email or "").strip().lower()
+    if not (email and s.first_admin_password):
         return
-    email = s.first_admin_email.lower()
     async with _session_maker()() as session:
         existing = await session.scalar(select(User).where(User.email == email))
         if existing is not None:
             return
+        try:
+            email = _EMAIL_ADAPTER.validate_python(email)
+        except ValidationError as exc:
+            raise ValueError(
+                "VIGILO_FIRST_ADMIN_EMAIL must be a valid, non-special-use email address"
+            ) from exc
         session.add(User(
             email=email,
             hashed_password=PasswordHelper().hash(s.first_admin_password),
