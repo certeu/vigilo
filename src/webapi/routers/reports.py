@@ -23,7 +23,7 @@ from src.webapi.reports import (
     build_bundle_zip,
     build_patches_zip,
     read_report,
-    resolve_deliverable_file,
+    open_report_image,
 )
 
 router = APIRouter(tags=["reports"])
@@ -81,17 +81,29 @@ async def get_run_file(
     rel_path: str,
     token: str | None = None,
     session: AsyncSession = Depends(get_async_session),
-) -> FileResponse:
-    """Serve a file from the run's deliverables dir (report screenshots).
+) -> StreamingResponse:
+    """Serve a report screenshot (a raster image under deliverables/screenshots/).
 
     Auth is via ``?token=<jwt>`` because ``<img>`` requests cannot attach a
-    Bearer header. Path traversal outside deliverables/ is rejected."""
+    Bearer header. Symlinks and anything outside screenshots/ are rejected."""
     user = await _user_from_query_token(token, session)
     run = await _run_or_404(run_id, session, user)
-    path = resolve_deliverable_file(run.data_dir, run.session_id, rel_path)
-    if path is None:
+    opened = open_report_image(run.data_dir, run.session_id, rel_path)
+    if opened is None:
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(path)
+    fh, media_type = opened
+    return StreamingResponse(
+        _iter_file(fh), media_type=media_type,
+        headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"},
+    )
+
+
+def _iter_file(fh):
+    try:
+        while chunk := fh.read(64 * 1024):
+            yield chunk
+    finally:
+        fh.close()
 
 
 @router.get("/runs/{run_id}/artifacts")
