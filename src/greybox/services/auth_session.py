@@ -154,7 +154,15 @@ async def _validate_cookie(
                 return False
         return True
     except Exception as exc:
-        logger.warning("Cookie validation failed (non-fatal): %s", exc)
+        # Only the exception type: its message may quote the header value
+        # (httpx: "Illegal header value b'...'"), and the cookie is a secret.
+        hint = (
+            " (the cookie is not a valid HTTP header value)"
+            if type(exc).__name__ == "LocalProtocolError" else ""
+        )
+        logger.warning(
+            "Cookie validation failed (non-fatal): %s%s", type(exc).__name__, hint,
+        )
         return True
 
 
