@@ -177,11 +177,11 @@ export function RunDetail() {
   useEffect(() => {
     if (!id || !isTerminal) return;
     fetch(`/api/runs/${id}/report`, { headers: { Authorization: `Bearer ${getToken()}` } })
-      .then((r) => r.json())
+      .then(async (r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d) => setReport(d.exists ? d.markdown : null))
       .catch(() => {});
     fetch(`/api/runs/${id}/artifacts`, { headers: { Authorization: `Bearer ${getToken()}` } })
-      .then((r) => r.json())
+      .then(async (r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d) => setArtifacts(Array.isArray(d.artifacts) ? d.artifacts : []))
       .catch(() => {});
   }, [id, isTerminal]);
