@@ -62,6 +62,25 @@ class TestRepoConfigOverride:
         assert patched.status_code == 200
         assert patched.json()["pipeline_config"]["executor"] == "codex"
 
+    async def test_pipeline_config_accepts_max_concurrent_pipelines(self, client, user_token):
+        """Issue #27: the repo-level override must accept the concurrency field."""
+        h = {"Authorization": f"Bearer {user_token}"}
+        repo = (await client.post("/repositories", headers=h,
+                json={"name": "r3", "source_type": "upload"})).json()
+        patched = await client.patch(f"/repositories/{repo['id']}", headers=h,
+                                     json={"pipeline_config": {"max_concurrent_pipelines": 2}})
+        assert patched.status_code == 200
+        assert patched.json()["pipeline_config"]["max_concurrent_pipelines"] == 2
+
+    async def test_pipeline_config_rejects_out_of_bounds_concurrency(self, client, user_token):
+        h = {"Authorization": f"Bearer {user_token}"}
+        repo = (await client.post("/repositories", headers=h,
+                json={"name": "r4", "source_type": "upload"})).json()
+        for bad in (0, 33, -1):
+            resp = await client.patch(f"/repositories/{repo['id']}", headers=h,
+                                      json={"pipeline_config": {"max_concurrent_pipelines": bad}})
+            assert resp.status_code in (400, 422), f"value {bad} should be rejected"
+
     async def test_unknown_config_key_rejected(self, client, user_token):
         h = {"Authorization": f"Bearer {user_token}"}
         repo = (await client.post("/repositories", headers=h,

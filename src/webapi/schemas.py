@@ -193,7 +193,8 @@ class RepositoryRead(BaseModel):
     created_at: datetime
 
 
-_CONFIG_KEYS = {"executor", "model_small", "model_medium", "model_large"}
+_CONFIG_KEYS = {"executor", "model_small", "model_medium", "model_large",
+                "max_concurrent_pipelines"}  # issue #27: repo-level concurrency override
 
 
 class BulkDeleteRequest(BaseModel):
@@ -222,6 +223,11 @@ class RepositoryUpdate(BaseModel):
             bad = set(v) - _CONFIG_KEYS
             if bad:
                 raise ValueError(f"unknown pipeline_config keys: {sorted(bad)}")
+            lo, hi = PipelineConfig.BOUNDS["max_concurrent_pipelines"]
+            val = v.get("max_concurrent_pipelines")
+            if val is not None and not (lo <= int(val) <= hi):
+                raise ValueError(
+                    f"max_concurrent_pipelines must be in [{lo}, {hi}], got {val}")
         return v
 
     @field_validator("scan_config")
