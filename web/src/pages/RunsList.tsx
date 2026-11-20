@@ -149,7 +149,7 @@ export function RunsList() {
           body={
             <>
               This stops the scan; the run and its results so far are kept. A
-              cancelled scan cannot be restarted.
+              stopped scan cannot be restarted.
             </>
           }
           onConfirm={() => void cancel(confirmCancel)}
