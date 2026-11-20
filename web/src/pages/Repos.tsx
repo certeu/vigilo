@@ -131,7 +131,7 @@ export function Repos() {
           <>
             <span className="text-slate">{selected.size} selected</span>
             <button
-              className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-slate hover:bg-slate/5"
+              className="inline-flex items-center gap-1.5 rounded-md border border-severity-high/40 px-2.5 py-1 text-severity-high hover:bg-severity-high/5"
               title="Archive the selected repositories (reversible)"
               onClick={archiveSelected}
             >
