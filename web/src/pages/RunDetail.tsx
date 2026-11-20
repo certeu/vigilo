@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api, getToken, type Job, type Run, type TraceRailConfig } from "../api/client";
 import { TraceRail, type RailPhase } from "../components/TraceRail";
 import { StatusDot } from "../components/StatusDot";
+import { ReportImage } from "../components/ReportImage";
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
 
@@ -99,19 +100,16 @@ export function RunDetail() {
   const [report, setReport] = useState<string | null>(null);
   const [artifacts, setArtifacts] = useState<string[]>([]);
 
-  // The report references screenshots relatively (`screenshots/x.png`), which the
-  // browser cannot resolve against the API. Rewrite them to the authenticated
-  // files endpoint; <img> can't send a Bearer header, so the JWT rides as ?token=.
-  const reportWithImages = useMemo(() => {
-    if (!report || !id) return report;
-    const tok = getToken();
-    if (!tok) return report;
-    return report.replace(
-      /(!\[[^\]]*\]\()((?:\.\/)?screenshots\/[^)\s]+)(\))/g,
-      (_m: string, pre: string, rel: string, post: string) =>
-        `${pre}/api/runs/${id}/files/${encodeURI(rel)}?token=${encodeURIComponent(tok)}${post}`,
-    );
-  }, [report, id]);
+  // Report <img>s go through ReportImage (authenticated fetch -> blob URL).
+  // Memoised so the renderer keeps its identity and images aren't refetched.
+  const markdownComponents = useMemo<Components>(
+    () => ({
+      img: ({ src, alt, title }) => (
+        <ReportImage runId={id ?? ""} src={typeof src === "string" ? src : undefined} alt={alt} title={title} />
+      ),
+    }),
+    [id],
+  );
   const [error, setError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [rail, setRail] = useState<TraceRailConfig | null>(null);
@@ -384,7 +382,9 @@ export function RunDetail() {
             </div>
           </div>
           <div className="markdown max-h-[640px] overflow-auto break-words p-6">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{reportWithImages}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+              {report}
+            </ReactMarkdown>
           </div>
         </section>
       )}

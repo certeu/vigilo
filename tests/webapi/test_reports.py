@@ -155,10 +155,33 @@ class TestReportScreenshots:
         run, data_dir = await self._setup(client, user_token)
         _write_screenshot(data_dir, run["session_id"], "xss alert.png")
         r = await client.get(f"/runs/{run['id']}/files/screenshots/xss%20alert.png",
-                             params={"token": user_token})
+                             headers={"Authorization": f"Bearer {user_token}"})
         assert r.status_code == 200 and r.content == PNG
         assert r.headers["content-type"] == "image/png"
         assert r.headers["x-content-type-options"] == "nosniff"
+
+    async def test_requires_bearer_and_ignores_query_token(self, client, user_token):
+        run, data_dir = await self._setup(client, user_token)
+        _write_screenshot(data_dir, run["session_id"], "x.png")
+        url = f"/runs/{run['id']}/files/screenshots/x.png"
+        assert (await client.get(url)).status_code == 401
+        assert (await client.get(url, params={"token": user_token})).status_code == 401
+
+    async def test_private_run_of_another_user_is_refused(self, client, user_token, admin_token):
+        from src.webapi.settings import get_settings
+        h = {"Authorization": f"Bearer {admin_token}"}
+        repo = (await client.post("/repositories", headers=h, json={
+            "name": "private", "source_type": "upload", "is_private": True})).json()
+        job = (await client.post("/jobs", headers=h, json={
+            "repository_id": repo["id"], "name": "j", "stage_preset": "vuln"})).json()
+        run = (await client.post(f"/jobs/{job['id']}/run", headers=h)).json()
+        data_dir = os.path.join(get_settings().jobs_data_dir, run["id"])
+        _write_screenshot(data_dir, run["session_id"], "x.png")
+        ok = await client.get(f"/runs/{run['id']}/files/screenshots/x.png", headers=h)
+        assert ok.status_code == 200
+        r = await client.get(f"/runs/{run['id']}/files/screenshots/x.png",
+                             headers={"Authorization": f"Bearer {user_token}"})
+        assert r.status_code in (403, 404)
 
     async def test_only_raster_images_under_screenshots(self, client, user_token):
         run, data_dir = await self._setup(client, user_token)
@@ -167,7 +190,7 @@ class TestReportScreenshots:
         _write_report(data_dir, run["session_id"], "# Report")
         for rel in ("screenshots/poc.svg", "screenshots/poc.html", REPORT_FILENAME,
                     "screenshots/../" + REPORT_FILENAME, "screenshots/missing.png"):
-            r = await client.get(f"/runs/{run['id']}/files/{rel}", params={"token": user_token})
+            r = await client.get(f"/runs/{run['id']}/files/{rel}", headers={"Authorization": f"Bearer {user_token}"})
             assert r.status_code == 404, rel
 
     async def test_symlinked_screenshot_or_directory_not_served(self, client, user_token, tmp_path):
@@ -177,7 +200,7 @@ class TestReportScreenshots:
         d = deliverables_dir(data_dir, run["session_id"])
         os.makedirs(os.path.join(d, "screenshots"))
         os.symlink(outside, os.path.join(d, "screenshots", "x.png"))
-        r = await client.get(f"/runs/{run['id']}/files/screenshots/x.png", params={"token": user_token})
+        r = await client.get(f"/runs/{run['id']}/files/screenshots/x.png", headers={"Authorization": f"Bearer {user_token}"})
         assert r.status_code == 404 and b"secret-bytes" not in r.content
         # the whole deliverables directory replaced by a symlink to another tree
         elsewhere = tmp_path / "elsewhere"
@@ -187,5 +210,5 @@ class TestReportScreenshots:
         os.rmdir(os.path.join(d, "screenshots"))
         os.rmdir(d)
         os.symlink(elsewhere, d)
-        r = await client.get(f"/runs/{run['id']}/files/screenshots/x.png", params={"token": user_token})
+        r = await client.get(f"/runs/{run['id']}/files/screenshots/x.png", headers={"Authorization": f"Bearer {user_token}"})
         assert r.status_code == 404 and b"secret-bytes" not in r.content

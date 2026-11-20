@@ -4,13 +4,11 @@ from __future__ import annotations
 import asyncio
 import uuid
 
-import jwt
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.webapi.acl import require_run_access
-from src.webapi.auth.backend import get_jwt_strategy
 from src.webapi.auth.deps import current_active_user
 from src.webapi.db import get_async_session
 from src.webapi.models import Run, User
@@ -48,45 +46,18 @@ async def get_report(
     return {"exists": markdown is not None, "markdown": markdown or ""}
 
 
-async def _user_from_query_token(token: str | None, session: AsyncSession) -> User:
-    """Authenticate from a ``?token=`` query param (for <img> tags, which cannot
-    send an Authorization header). Same validation as the Bearer flow, including
-    the session-epoch revocation check."""
-    if not token:
-        raise HTTPException(status_code=401, detail="Token required")
-    strategy = get_jwt_strategy()
-    try:
-        payload = jwt.decode(
-            token,
-            strategy.decode_key,
-            audience=strategy.token_audience,
-            algorithms=[strategy.algorithm],
-        )
-        user_id = payload.get("sub")
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    if user_id is None:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    user = await session.get(User, uuid.UUID(str(user_id)))
-    if user is None or not user.is_active:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    if int(payload.get("epoch", 0) or 0) != int(getattr(user, "session_epoch", 0) or 0):
-        raise HTTPException(status_code=401, detail="Invalid token")
-    return user
-
-
 @router.get("/runs/{run_id}/files/{rel_path:path}")
 async def get_run_file(
     run_id: uuid.UUID,
     rel_path: str,
-    token: str | None = None,
+    user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> StreamingResponse:
     """Serve a report screenshot (a raster image under deliverables/screenshots/).
 
-    Auth is via ``?token=<jwt>`` because ``<img>`` requests cannot attach a
-    Bearer header. Symlinks and anything outside screenshots/ are rejected."""
-    user = await _user_from_query_token(token, session)
+    Uses the normal Bearer auth: the UI fetches screenshots itself and shows them
+    as blob URLs, so the session token never appears in a URL or an access log.
+    Symlinks and anything outside screenshots/ are rejected."""
     run = await _run_or_404(run_id, session, user)
     opened = open_report_image(run.data_dir, run.session_id, rel_path)
     if opened is None:
