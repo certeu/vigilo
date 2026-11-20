@@ -12,8 +12,10 @@ re-attaches rather than fails on restart).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+import time
 
 from src.webapi.engine.common import (
     build_workflow_input,
@@ -35,6 +37,38 @@ from src.webapi.models import (
 from src.webapi.settings import get_settings
 
 logger = logging.getLogger(__name__)
+
+# How long cancel() waits for the workflow to process the cancellation and
+# close before falling back to terminate().
+CANCEL_CLOSE_TIMEOUT_S = 5.0
+CANCEL_POLL_INTERVAL_S = 0.25
+
+# WorkflowExecutionStatus values that mean "still open": RUNNING, CONTINUED_AS_NEW.
+_OPEN_STATUS_VALUES = frozenset({1, 6})
+
+
+async def _await_workflow_closed(
+    handle,
+    timeout_s: float = CANCEL_CLOSE_TIMEOUT_S,
+    poll_s: float = CANCEL_POLL_INTERVAL_S,
+) -> bool:
+    """Poll describe() until the workflow reaches a closed state.
+
+    True once it is closed (CANCELED, COMPLETED, ...); False if it is still
+    running after timeout_s or its state cannot be read — the caller then
+    falls back to terminate().
+    """
+    deadline = time.monotonic() + timeout_s
+    while True:
+        try:
+            desc = await handle.describe()
+        except Exception:
+            return False
+        if getattr(desc.status, "value", None) not in _OPEN_STATUS_VALUES:
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        await asyncio.sleep(poll_s)
 
 
 class TemporalEngine:
@@ -146,13 +180,20 @@ class TemporalEngine:
             # leave the in-flight activity (and its agent subprocess) running
             # until the heartbeat timeout, keeping zombie LLM requests alive.
             await handle.cancel(reason="cancelled via platform")
-            # Belt-and-braces: if the workflow somehow survives the cancel
-            # request (e.g. it is between activities), terminate it outright so
-            # no further activity gets scheduled.
-            try:
-                await handle.terminate(reason="cancelled via platform (post-cancel)")
-            except Exception:
-                pass
+            # The cancellation is processed asynchronously: terminating right
+            # away would close the workflow as TERMINATED before it ever sees
+            # the cancel, i.e. exactly the old behaviour. Give it a few seconds
+            # to wind down, and only terminate as a fallback if it is still
+            # running (e.g. it is between activities).
+            if not await _await_workflow_closed(
+                handle,
+                timeout_s=CANCEL_CLOSE_TIMEOUT_S,
+                poll_s=CANCEL_POLL_INTERVAL_S,
+            ):
+                try:
+                    await handle.terminate(reason="cancelled via platform (cancel fallback)")
+                except Exception as exc:
+                    logger.warning("terminate fallback failed for %s: %s", run.id, exc)
         except Exception as exc:  # pragma: no cover
             logger.warning("cancel failed for %s: %s", run.id, exc)
         await drop_run_secrets(run)

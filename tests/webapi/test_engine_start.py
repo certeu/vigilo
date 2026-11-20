@@ -163,8 +163,8 @@ class TestTemporalEngine:
         assert run.status == "cancelled"
         client.get_workflow_handle.assert_called_with("sess-abc123")
         handle.cancel.assert_awaited_once()
-        # belt-and-braces: terminate is still awaited after the cancel request
-        handle.terminate.assert_awaited_once()
+        # describe() reports COMPLETED: the workflow is closed, no terminate fallback
+        handle.terminate.assert_not_awaited()
 
     async def test_push_patches_sends_flags_and_a_reference_only(
         self, monkeypatch, tmp_path, patched_settings, session_maker
@@ -410,3 +410,122 @@ class TestDockerEngine:
             monkeypatch, tmp_path, _repo(source_type="upload", push_patches=True))
         assert "secrets" not in self.tclient.start_workflow.call_args.args[1]
         assert len(call.kwargs["volumes"]) == 1
+
+
+class TestCancelWaitsBeforeTerminate:
+    """``TemporalEngine.cancel`` requests a graceful cancel, waits for the
+    workflow to close, and only terminates as a fallback.
+
+    ``terminate()`` right after ``cancel()`` would close the workflow as
+    TERMINATED before it ever processes the cancellation — exactly the old
+    behaviour this fix removes. So terminate must run only when the workflow
+    is still open after the grace period (or its state cannot be read).
+    """
+
+    @staticmethod
+    def _desc(value):
+        return SimpleNamespace(status=SimpleNamespace(value=value))
+
+    def _engine(self, monkeypatch, handle):
+        from src.webapi.engine.temporal import TemporalEngine
+        engine = TemporalEngine()
+        client = MagicMock()
+        client.get_workflow_handle = MagicMock(return_value=handle)
+        monkeypatch.setattr(engine, "_client", AsyncMock(return_value=client))
+        return engine
+
+    @staticmethod
+    def _handle(*describes, terminate_error=None):
+        handle = MagicMock()
+        handle.cancel = AsyncMock()
+        handle.describe = AsyncMock(
+            side_effect=describes if describes else [TestCancelWaitsBeforeTerminate._desc(1)]
+        )
+        if terminate_error:
+            handle.terminate = AsyncMock(side_effect=terminate_error)
+        else:
+            handle.terminate = AsyncMock()
+        return handle
+
+    @pytest.fixture(autouse=True)
+    def _fast_polling(self, monkeypatch):
+        monkeypatch.setattr("src.webapi.engine.temporal.CANCEL_CLOSE_TIMEOUT_S", 0.05)
+        monkeypatch.setattr("src.webapi.engine.temporal.CANCEL_POLL_INTERVAL_S", 0.01)
+
+    async def test_already_closed_workflow_skips_terminate(self, monkeypatch, tmp_path, patched_settings):
+        patched_settings()
+        handle = self._handle(self._desc(4))  # CANCELED
+        engine = self._engine(monkeypatch, handle)
+        run = _run(tmp_path)
+        run.workflow_id = "sess-abc123"
+        await engine.cancel(run)
+        assert run.status == "cancelled"
+        handle.cancel.assert_awaited_once_with(reason="cancelled via platform")
+        handle.describe.assert_awaited()
+        handle.terminate.assert_not_awaited()
+
+    async def test_workflow_closing_during_polling_skips_terminate(
+        self, monkeypatch, tmp_path, patched_settings
+    ):
+        patched_settings()
+        handle = self._handle(self._desc(1), self._desc(4))  # RUNNING then CANCELED
+        engine = self._engine(monkeypatch, handle)
+        run = _run(tmp_path)
+        run.workflow_id = "sess-abc123"
+        await engine.cancel(run)
+        assert run.status == "cancelled"
+        assert handle.describe.await_count >= 2
+        handle.terminate.assert_not_awaited()
+
+    async def test_still_running_after_grace_period_falls_back_to_terminate(
+        self, monkeypatch, tmp_path, patched_settings
+    ):
+        patched_settings()
+        handle = self._handle()  # always RUNNING
+        engine = self._engine(monkeypatch, handle)
+        run = _run(tmp_path)
+        run.workflow_id = "sess-abc123"
+        await engine.cancel(run)
+        assert run.status == "cancelled"
+        handle.cancel.assert_awaited_once()
+        handle.terminate.assert_awaited_once_with(
+            reason="cancelled via platform (cancel fallback)"
+        )
+
+    async def test_describe_error_falls_back_to_terminate(self, monkeypatch, tmp_path, patched_settings):
+        patched_settings()
+        handle = self._handle()
+        handle.describe = AsyncMock(side_effect=RuntimeError("temporal unreachable"))
+        engine = self._engine(monkeypatch, handle)
+        run = _run(tmp_path)
+        run.workflow_id = "sess-abc123"
+        await engine.cancel(run)
+        assert run.status == "cancelled"
+        handle.terminate.assert_awaited_once()
+
+    async def test_terminate_fallback_error_is_swallowed(self, monkeypatch, tmp_path, patched_settings):
+        patched_settings()
+        handle = self._handle(terminate_error=RuntimeError("workflow already closed"))
+        engine = self._engine(monkeypatch, handle)
+        run = _run(tmp_path)
+        run.workflow_id = "sess-abc123"
+        await engine.cancel(run)  # must not raise
+        assert run.status == "cancelled"
+        handle.terminate.assert_awaited_once()
+
+    async def test_cancel_error_leaves_run_cancelled(self, monkeypatch, tmp_path, patched_settings):
+        patched_settings()
+        engine = self._engine(monkeypatch, self._handle())
+        engine._client = AsyncMock(side_effect=RuntimeError("no client"))
+        run = _run(tmp_path)
+        run.workflow_id = "sess-abc123"
+        await engine.cancel(run)  # must not raise
+        assert run.status == "cancelled"
+
+    async def test_run_without_workflow_id_touches_nothing(self, monkeypatch, tmp_path, patched_settings):
+        patched_settings()
+        engine = self._engine(monkeypatch, self._handle())
+        run = _run(tmp_path)  # workflow_id None
+        await engine.cancel(run)
+        assert run.status == "cancelled"
+        engine._client.assert_not_awaited()
