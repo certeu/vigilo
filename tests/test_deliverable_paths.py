@@ -29,11 +29,27 @@ def _run(script: Path, cwd: Path, *args: str, stdin: str | None = None):
 
 
 @pytest.fixture
-def repo(tmp_path: Path) -> Path:
+def base(tmp_path: Path):
+    """Working dir for a test, guaranteed to be outside /tmp.
+
+    The scripts accept anything under /tmp as agent scratch space, so files
+    meant to be "outside" must not live there. pytest's tmp_path is under /tmp
+    on Linux (CI) but not on macOS; fall back to a dir under $HOME there.
+    """
+    tmp_root = os.path.realpath("/tmp") + os.sep
+    if not os.path.realpath(tmp_path).startswith(tmp_root):
+        yield tmp_path
+        return
+    with tempfile.TemporaryDirectory(prefix=".vigilo-test-", dir=Path.home()) as d:
+        yield Path(d)
+
+
+@pytest.fixture
+def repo(base: Path) -> Path:
     """A checkout whose ``deliverables`` is a symlink to a directory outside it."""
-    repo = tmp_path / "repo"
+    repo = base / "repo"
     (repo / ".git").mkdir(parents=True)
-    out = tmp_path / "out" / "deliverables"
+    out = base / "out" / "deliverables"
     out.mkdir(parents=True)
     (repo / "deliverables").symlink_to(out)
     return repo
@@ -67,8 +83,8 @@ def test_save_from_repository_file(repo):
     assert code == 0
 
 
-def test_save_rejects_other_locations(repo, tmp_path):
-    outside = tmp_path / "secret.txt"
+def test_save_rejects_other_locations(repo, base):
+    outside = base / "secret.txt"
     outside.write_text("secret")
     (repo / "escape").symlink_to(outside)
     for path in (str(outside), "../secret.txt", "escape", "/etc/hosts",
@@ -98,8 +114,8 @@ def test_record_file_from_deliverables_tmp_and_repo(repo, scratch):
         assert code == 0 and out["status"] == "ok", (rel, out)
 
 
-def test_record_file_rejects_other_locations(repo, tmp_path):
-    outside = tmp_path / "lead.json"
+def test_record_file_rejects_other_locations(repo, base):
+    outside = base / "lead.json"
     outside.write_text(json.dumps({"title": "a", "hypothesis": "h"}))
     for path in (str(outside), "/etc/hosts"):
         code, out = _run(RECORD, repo, "lead", "--file", path)
