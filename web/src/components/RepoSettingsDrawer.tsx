@@ -4,6 +4,7 @@ import { api, type AccessGrant, type ModelDefaults, type Repository } from "../a
 
 const CONFIG_FIELDS = [
   { key: "executor", label: "Executor (claude / codex / opencode)" },
+  { key: "max_concurrent_pipelines", label: "Max parallel agents (1-32, empty = global default)" },
   { key: "model_small", label: "Model — small" },
   { key: "model_medium", label: "Model — medium" },
   { key: "model_large", label: "Model — large" },
