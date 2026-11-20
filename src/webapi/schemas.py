@@ -115,6 +115,7 @@ class ModelDefaultsRead(BaseModel):
     model_small: str
     model_medium: str
     model_large: str
+    default_max_concurrent_pipelines: int
 
 
 class ExecutorStatus(BaseModel):

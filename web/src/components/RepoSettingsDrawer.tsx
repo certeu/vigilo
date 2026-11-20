@@ -204,7 +204,9 @@ export function RepoSettingsDrawer({
             <div key={f.key} className="mb-3">
               <label htmlFor={`cfg-${f.key}`} className="mb-1 block text-sm text-slate">{f.label}</label>
               <input id={`cfg-${f.key}`} className="field" placeholder={
-                       defaults ? `global: ${defaults[f.key as keyof ModelDefaults] || "worker default"}` : "(use global default)"
+                       f.key === "max_concurrent_pipelines" && defaults
+                         ? `global: ${defaults.default_max_concurrent_pipelines}`
+                         : defaults ? `global: ${defaults[f.key as keyof ModelDefaults] || "worker default"}` : "(use global default)"
                      }
                      value={cfg[f.key] ?? ""} onChange={(e) => setCfg({ ...cfg, [f.key]: e.target.value })} />
             </div>
