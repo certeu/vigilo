@@ -7,6 +7,7 @@ export function ConfirmDialog({
   title,
   body,
   confirmLabel = "Delete",
+  cancelLabel = "Cancel",
   danger = true,
   onConfirm,
   onCancel,
@@ -14,6 +15,7 @@ export function ConfirmDialog({
   title: string;
   body: ReactNode;
   confirmLabel?: string;
+  cancelLabel?: string;
   danger?: boolean;
   onConfirm: () => void | Promise<void>;
   onCancel: () => void;
@@ -46,7 +48,7 @@ export function ConfirmDialog({
         {err && <p className="mb-3 text-sm text-severity-critical">{err}</p>}
         <div className="flex justify-end gap-3">
           <button type="button" className="btn-ghost" onClick={onCancel} disabled={busy}>
-            Cancel
+            {cancelLabel}
           </button>
           <button
             type="button"

@@ -146,6 +146,7 @@ export function RunsList() {
         <ConfirmDialog
           title="Cancel run"
           confirmLabel="OK"
+          cancelLabel="Back"
           body={
             <>
               This cancels the scan; the run and its results so far are kept. A
