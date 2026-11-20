@@ -115,6 +115,10 @@ class ModelDefaultsRead(BaseModel):
     model_small: str
     model_medium: str
     model_large: str
+    # What the worker falls back to when a model field is empty, per executor:
+    # {"claude": {"model_small": "...", ...}, ...}. Resolved from the API's environment
+    # (the .env it shares with the worker), else the executor's built-in default.
+    worker_defaults: dict[str, dict[str, str]] = {}
 
 
 class ExecutorStatus(BaseModel):

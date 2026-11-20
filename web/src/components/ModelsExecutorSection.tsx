@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { api, type AdminConfig, type ExecutorStatus } from "../api/client";
+import { api, type AdminConfig, type ExecutorStatus, type ModelDefaults } from "../api/client";
 
 const EXECUTORS = ["claude", "codex", "opencode"] as const;
 const TIERS = [
@@ -21,6 +21,10 @@ export function ModelsExecutorSection({ cfg, onSaved }: { cfg: AdminConfig; onSa
   const [status, setStatus] = useState<ExecutorStatus[] | null>(null);
   const [checking, setChecking] = useState(false);
   const [checkErr, setCheckErr] = useState<string | null>(null);
+  const [workerDefaults, setWorkerDefaults] = useState<ModelDefaults["worker_defaults"]>(undefined);
+  useEffect(() => {
+    api.modelDefaults().then((d) => setWorkerDefaults(d.worker_defaults)).catch(() => undefined);
+  }, []);
 
   async function check() {
     setChecking(true);
@@ -89,7 +93,12 @@ export function ModelsExecutorSection({ cfg, onSaved }: { cfg: AdminConfig; onSa
             <div key={t.key}>
               <label htmlFor={`adm-${t.key}`} className="mb-1 block text-sm text-slate">{t.label}</label>
               <input id={`adm-${t.key}`} className="field mono" value={models[t.key]}
-                     placeholder="worker default" maxLength={100} spellCheck={false}
+                     placeholder={
+                       workerDefaults?.[executor]?.[t.key]
+                         ? `worker default (${workerDefaults[executor][t.key]})`
+                         : "worker default"
+                     }
+                     maxLength={100} spellCheck={false}
                      onChange={(e) => setModels({ ...models, [t.key]: e.target.value })} />
             </div>
           ))}

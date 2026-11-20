@@ -63,13 +63,38 @@ async def put_config(
     return cfg
 
 
+def worker_model_defaults(env: Mapping[str, str] | None = None) -> dict[str, dict[str, str]]:
+    """Per executor, the model each tier resolves to when no admin/repo value is set:
+    the tier's environment variable (e.g. ANTHROPIC_MEDIUM_MODEL) or the built-in
+    default. Read from this process's environment, which the compose setup shares
+    with the worker (same .env); a variable set only on the worker is not seen."""
+    from src.ai import claude_executor, codex_executor, opencode_executor
+
+    env = os.environ if env is None else env
+    out: dict[str, dict[str, str]] = {}
+    for name, mod in (("claude", claude_executor), ("codex", codex_executor),
+                      ("opencode", opencode_executor)):
+        try:
+            out[name] = {f"model_{t}": mod.resolve_model(t, env)
+                         for t in ("small", "medium", "large")}
+        except Exception as exc:  # pragma: no cover - display only
+            logger.warning("could not resolve %s worker defaults: %s", name, exc)
+    return out
+
+
 @router.get("/config/models", response_model=ModelDefaultsRead)
 async def get_model_defaults(
     _: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_async_session),
-) -> AdminConfig:
-    """Effective global executor/models, so repository settings can show them."""
-    return await _get_or_create(session)
+) -> ModelDefaultsRead:
+    """Effective global executor/models, so repository settings can show them, plus
+    the worker's fallback model per executor and tier."""
+    cfg = await _get_or_create(session)
+    return ModelDefaultsRead(
+        executor=cfg.executor, model_small=cfg.model_small or "",
+        model_medium=cfg.model_medium or "", model_large=cfg.model_large or "",
+        worker_defaults=worker_model_defaults(),
+    )
 
 
 def _set(env: Mapping[str, str], name: str) -> bool:
