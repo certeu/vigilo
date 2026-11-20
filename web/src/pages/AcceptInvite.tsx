@@ -34,7 +34,7 @@ export function AcceptInvite() {
           <form onSubmit={submit} className="card space-y-4 p-6">
             <div>
               <label htmlFor="new-password" className="mb-1 block text-sm text-slate">New password</label>
-              <input id="new-password" className="field" type="password" value={password}
+              <input id="new-password" className="field" type="password" autoComplete="new-password" value={password}
                      onChange={(e) => setPassword(e.target.value)} minLength={8} required />
             </div>
             {error && <p className="text-sm text-severity-critical">{error}</p>}
