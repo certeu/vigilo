@@ -116,3 +116,4 @@ prompts/pipeline-testing/
 .continue/
 .windsurf/
 .aider*
+web/tsconfig.tsbuildinfo
