@@ -12,7 +12,7 @@ FROM cgr.dev/chainguard/wolfi-base:latest AS builder
 RUN apk update && apk add --no-cache \
     build-base git curl wget ca-certificates \
     libpcap-dev linux-headers \
-    go nodejs-22 npm \
+    go nodejs-26 npm \
     python3 py3-pip \
     ruby ruby-dev \
     bash
@@ -52,7 +52,7 @@ USER root
 RUN apk update && apk add --no-cache \
     git bash curl ca-certificates \
     libpcap \
-    nodejs-22 npm \
+    nodejs-26 npm \
     python3 ruby \
     # Chromium and dependencies for Playwright
     chromium \

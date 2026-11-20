@@ -585,10 +585,15 @@ export VIGILO_EXECUTION_ENGINE=fake
 python -m src.webapi.main          # http://localhost:8080/docs
 ```
 
+The web UI requires Node.js 26 and npm 11.20 or later. With
+[nvm](https://github.com/nvm-sh/nvm), `cd web && nvm install` installs and selects the
+version in `web/.nvmrc`. Other version managers can read the same file or use the
+`packageManager` declaration in `web/package.json`.
+
 Then start the web UI, which proxies `/api` to that API:
 
 ```bash
-cd web && npm install && npm run dev      # http://localhost:5173
+cd web && npm ci && npm run dev           # http://localhost:5173
 ```
 
 Tests and the frontend build gate:

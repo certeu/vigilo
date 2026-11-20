@@ -9,6 +9,9 @@ the UI on its own for frontend development.
 
 ## Run (dev)
 
+Requires Node.js 26 and npm 11.20 or later. Run `nvm install` to install and select
+the version in `.nvmrc` before installing dependencies.
+
 ```bash
 # 1) Start the API with the fake engine + a seeded admin (no Docker/Temporal needed):
 cd ..   # repo root
@@ -19,7 +22,7 @@ export VIGILO_FIRST_ADMIN_EMAIL=admin@example.com VIGILO_FIRST_ADMIN_PASSWORD=ch
 
 # 2) Start the SPA (proxies /api -> :8080):
 cd web
-npm install
+npm ci
 npm run dev        # http://localhost:5173
 ```
 

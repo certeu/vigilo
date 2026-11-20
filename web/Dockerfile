@@ -1,7 +1,7 @@
 # Multi-stage: build the SPA with Node, serve the static bundle with nginx.
-FROM node:20-slim AS build
+FROM node:26-slim AS build
 WORKDIR /app
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci --no-audit --no-fund
 COPY . .
 RUN npm run build
