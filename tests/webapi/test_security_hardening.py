@@ -225,7 +225,7 @@ class TestCredentialOwnership:
             with pytest.raises(RuntimeError):
                 await engine._resolve_token(uuid.UUID(theirs), repo)
             assert await engine._resolve_token(uuid.UUID(mine), repo) == "glpat-x"
-            repo.gitlab_url = "https://other.example/g/p.git"  # host drift: binding refuses
+            repo.remote_url = "https://other.example/g/p.git"  # host drift: binding refuses
             with pytest.raises(RuntimeError):
                 await engine._resolve_token(uuid.UUID(mine), repo)
 
@@ -251,19 +251,19 @@ class TestSecretStoreRateLimit:
         get_settings.cache_clear()
         rid = await _make_run(session_maker)
         async with session_maker() as s:
-            key = await secret_store.issue(s, rid, {"gitlab_token": "t0k"})
+            key = await secret_store.issue(s, rid, {"forge_token": "t0k"})
         async with session_maker() as s:
             seen = set()
             for _ in range(10):  # the stranger floods the run with bad keys
                 try:
-                    await secret_store.redeem(s, rid, "x" * 40, ["gitlab_token"], client="evil")
+                    await secret_store.redeem(s, rid, "x" * 40, ["forge_token"], client="evil")
                 except secret_store.RedemptionRefused:
                     seen.add("refused")
                 except secret_store.RedemptionRateLimited:
                     seen.add("limited")
             assert seen == {"refused", "limited"}      # brute force is still throttled
             # ... and the legitimate worker, holding the key, is unaffected
-            assert await secret_store.redeem(s, rid, key, ["gitlab_token"], client="worker") == {"gitlab_token": "t0k"}
+            assert await secret_store.redeem(s, rid, key, ["forge_token"], client="worker") == {"forge_token": "t0k"}
         get_settings.cache_clear()
 
     async def test_per_source_failure_limit_spans_runs(self, session_maker, monkeypatch):
@@ -274,7 +274,7 @@ class TestSecretStoreRateLimit:
         async with session_maker() as s:
             for _ in range(14):
                 try:
-                    await secret_store.redeem(s, uuid.uuid4(), "x" * 40, ["gitlab_token"], client="evil")
+                    await secret_store.redeem(s, uuid.uuid4(), "x" * 40, ["forge_token"], client="evil")
                 except secret_store.RedemptionRefused:
                     outcomes.append("refused")
                 except secret_store.RedemptionRateLimited:
@@ -324,7 +324,7 @@ class TestIngestion:
         monkeypatch.setattr(ingestion, "scrub_origin_credentials", boom)
         with pytest.raises(RuntimeError, match="scrub"):
             ingestion.prepare_repo(source_type="gitlab", repo_dir=str(repo_dir),
-                                   gitlab_url="https://gl.example/g/p.git", token="glpat-x")
+                                   remote_url="https://gl.example/g/p.git", token="glpat-x")
         assert os.listdir(repo_dir) == []
 
     def test_scrub_uses_check_true(self):

@@ -112,7 +112,7 @@ def redeemed(monkeypatch):
 
     async def fake(secrets, want, **kw):
         calls.append((secrets, list(want)))
-        return {"gitlab_token": TOKEN}
+        return {"forge_token": TOKEN}
 
     monkeypatch.setattr(run_secrets, "redeem", fake)
     return calls
@@ -153,7 +153,7 @@ class TestDeliver:
         assert res["pushed"] == ["fix/VG-001"]
         assert "fix/VG-001" in origin_branches(world)
         assert "fix/VG-002" not in origin_branches(world)  # empty diff is not pushed
-        assert redeemed == [(SECRETS, ["gitlab_token", "cookie_header"])]   # once (cookie only to mask it)
+        assert redeemed == [(SECRETS, ["forge_token", "cookie_header"])]   # once (cookie only to mask it)
 
         posts = [c for c in gitlab if c.method == "POST"]
         assert len(posts) == 1
@@ -549,7 +549,7 @@ class TestRebuild:
                            source=world.source, secrets=SECRETS)
         res = await acts.rebuild_git(ai)
         assert res["ok"] and res["base"] == "scanned_commit"
-        assert redeemed == [(SECRETS, ["gitlab_token"])]     # private repos need it to clone
+        assert redeemed == [(SECRETS, ["forge_token"])]     # private repos need it to clone
         # no push -> no token requested
         redeemed.clear()
         res = await acts.rebuild_git(ActivityInput(repo_path=world.repo, workflow_id="w", session_id="s",

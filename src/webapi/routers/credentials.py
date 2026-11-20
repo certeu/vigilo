@@ -28,7 +28,8 @@ router = APIRouter(tags=["credentials"])
 
 def _to_read(c: Credential) -> CredentialRead:
     return CredentialRead(
-        id=c.id, kind=c.kind, label=c.label, gitlab_base_url=c.gitlab_base_url,
+        id=c.id, kind=c.kind, label=c.label, forge_base_url=c.forge_base_url,
+        gitlab_base_url=c.forge_base_url,
         created_at=c.created_at, has_secret=bool(c.secret_enc),
     )
 
@@ -43,7 +44,7 @@ async def create_credential(
     vault = build_vault(get_settings())
     cred = Credential(
         owner_id=user.id, kind=payload.kind, label=payload.label,
-        secret_enc=vault.encrypt(payload.secret), gitlab_base_url=payload.gitlab_base_url,
+        secret_enc=vault.encrypt(payload.secret), forge_base_url=payload.forge_base_url,
     )
     session.add(cred)
     await session.commit()
@@ -77,7 +78,7 @@ async def delete_credential(
     # nothing. Runs already in flight keep the copy stored in their own run record
     # until they end.
     # In-flight runs that use this credential (as the job's cookie or the repository's
-    # GitLab token) lose their stored secret: deleting a credential revokes it now.
+    # forge credential) lose their stored secret: deleting a credential revokes it now.
     active_runs = (
         select(Run.id)
         .join(Job, Job.id == Run.job_id)

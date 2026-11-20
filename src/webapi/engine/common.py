@@ -98,28 +98,57 @@ async def resolve_job_cookie(job: Any) -> str | None:
     return build_vault(get_settings()).decrypt(cred.secret_enc)
 
 
+async def resolve_repo_token(credential_id: Any, repo: Repository) -> str | None:
+    """The token to reach the repository's forge with, from the owner's credential.
+    Re-checks owner, kind and host binding right before decrypting; a failing check
+    aborts the run start. A GitHub App credential mints a fresh installation token."""
+    import asyncio
+
+    from src.webapi.credential_guard import (
+        CredentialRejected,
+        repo_access_token,
+        validate_repo_credential,
+    )
+    from src.webapi.db import _session_maker
+    from src.webapi.models import Credential
+
+    async with _session_maker()() as session:
+        cred = await session.get(Credential, credential_id)
+    if cred is None:
+        return None
+    try:
+        validate_repo_credential(cred, repo.created_by, repo.source_type, repo.remote_url)
+    except CredentialRejected as exc:
+        raise RuntimeError(f"Repository credential refused: {exc}") from exc
+    return await asyncio.to_thread(repo_access_token, cred, repo.source_type, repo.remote_url)
+
+
 async def build_run_extras(run: Run, job: Any, repo: Repository, token: str | None) -> dict:
     """Non-secret workflow-input fields about the source, patch push and authenticated
     testing, plus the ``secrets`` reference when the run holds any secret.
 
-    The GitLab token (only when the repo opted into ``push_patches``) and the job's
+    The forge token (only when the repo opted into ``push_patches``) and the job's
     cookie header are stored as ONE encrypted per-run record; the input carries just
     ``{"ref": <run id>, "key": <redemption key>}``. The worker redeems them
     just in time over the internal API. Raises if the record cannot be stored (the
     caller must treat that as a failed start)."""
+    from src.services.forges import FORGE_TOKEN_SECRET, get_forge
+
     extras: dict = {}
-    if repo.source_type == "gitlab" and repo.gitlab_url:
-        extras["source"] = {"remote_url": repo.gitlab_url, "commit": run.commit_sha or None}
+    forge = get_forge(repo.source_type)
+    if forge is not None and repo.remote_url:
+        extras["source"] = {"remote_url": repo.remote_url, "commit": run.commit_sha or None}
     bundle: dict[str, str] = {}
     if repo.push_patches:
-        if repo.source_type == "gitlab" and token:
-            bundle["gitlab_token"] = token
+        if forge is not None and forge.supports_push and token:
+            bundle[FORGE_TOKEN_SECRET] = token
             extras["push"] = {"enabled": True}
         else:
             logger.info(
                 "Run %s: push_patches is on but there is nothing to push to (%s); "
                 "patches stay local.", run.id,
-                "uploaded source has no remote" if repo.source_type == "upload"
+                "uploaded source has no remote" if forge is None
+                else f"pushing to {forge.label} is not supported yet" if not forge.supports_push
                 else "no credential attached",
             )
     cookie = await resolve_job_cookie(job)
@@ -220,9 +249,9 @@ def build_model_overrides(admin: Any, repo: Repository) -> dict:
 
 
 def capture_source_info(run: Run, repo: Repository, repo_dir: str) -> None:
-    """Best-effort: commit SHA of a GitLab checkout + a persistent browse-only file
+    """Best-effort: commit SHA of a forge checkout + a persistent browse-only file
     tree (the checkout is deleted after the run, so grab both now)."""
-    if repo.source_type == "gitlab":
+    if repo.source_type != "upload":
         try:
             import subprocess
             out = subprocess.run(

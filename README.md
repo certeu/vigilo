@@ -9,7 +9,7 @@ Vigilo was built by **CERT-EU** so security teams can run repeatable, agent-driv
 against their own code and services. It ships two ways to run:
 
 - **Web platform** — a multi-user API + web UI for white-box scans. Sign in, attach a
-  repository (upload or GitLab), pick what to run, execute asynchronously, and browse findings,
+  repository (upload, GitLab or GitHub), pick what to run, execute asynchronously, and browse findings,
   reports and dashboards.
 - **Command-line grey-box** — test a running application without its source code, with `make`;
   no web platform required.
@@ -315,7 +315,7 @@ default); to run them by hand:
 ### 3. Sign in and run a scan
 
 1. Open the UI at **`https://$VIGILO_HOSTNAME`** and sign in as the first admin.
-2. **Repositories** → attach a source (upload a `.zip`/`.tar.gz` or folder, or connect a GitLab repo).
+2. **Repositories** → attach a source (upload a `.zip`/`.tar.gz` or folder, or connect a GitLab or GitHub repo).
 3. **Jobs** → create a job (repository + [pipeline mode](#pipeline-modes) + optional target URL),
    then **Run** it.
 4. Watch progress on the **Run detail** page (Trace Rail + live log). When it finishes, open the
@@ -504,7 +504,7 @@ page shows a *retrying* banner. Rate-limited subscription plans can opt in to th
   by email, and the first admin is bootstrapped from `VIGILO_FIRST_ADMIN_EMAIL` /
   `VIGILO_FIRST_ADMIN_PASSWORD` on first boot. Roles are `admin` (users, invitations, global
   config) and `user` (repositories, jobs, runs).
-- **Per-user credentials** (GitLab tokens, session cookies) are stored **encrypted** (Fernet) and
+- **Per-user credentials** (GitLab tokens, GitHub tokens and Apps, session cookies) are stored **encrypted** (Fernet) and
   are never returned by the API.
 - **Repository privacy:** a repository can be marked `is_private`. Private repos — and all their
   jobs, runs, reports, and metrics — are visible only to the owner, explicitly granted users, and
@@ -520,6 +520,23 @@ time, and masked (`***`) in saved prompts, agent logs, `events.jsonl` and `workf
 can still copy it into files they write, so use a low-privilege test session. Runs started by
 other users or by schedules use the job owner's cookie; deleting the credential clears it from
 its jobs.
+
+### GitHub and GitHub Enterprise
+
+A repository on github.com or a GitHub Enterprise Server host (`source_type: "github"`,
+`remote_url: https://<host>/<owner>/<repo>`) is cloned with one of two credentials, bound to
+that host:
+
+- `github_token`: a personal access token (fine-grained or classic); read access to the
+  repository's contents is enough. Paste it when adding the repository in the UI.
+- `github_app`: a GitHub App (`{"app_id", "private_key", "installation_id"?}`, via the API as
+  `github_app` on `POST /repositories`, or `POST /credentials` with `forge_base_url`). Each time
+  access is needed, Vigilo mints a short-lived installation token limited to that one
+  repository and `contents: read`; it is never stored. A fixed `installation_id` must be the
+  App's installation on the repository's owner (organisation or user); leave it empty to have
+  Vigilo look up the installation for the repository.
+
+Pushing fixes back and webhooks are GitLab only for now.
 
 ### GitLab push-back
 

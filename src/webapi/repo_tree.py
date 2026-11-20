@@ -1,7 +1,7 @@
 """Persistent, browse-only repository file tree.
 
-Captured at ingest — for GitLab repos that's the ONLY time the checkout exists
-(gitlab checkouts are deleted after a run, see cleanup.cleanup_run_source); for
+Captured at ingest — for forge repos that's the ONLY time the checkout exists
+(forge checkouts are deleted after a run, see cleanup.cleanup_run_source); for
 uploads it's captured at upload-validation time. Stored as a flat, sorted list of
 repo-relative FILE paths — names only, NEVER file contents — under
 ``{uploads_dir}/{repo_id}.tree.json`` so the repo detail page can render a
@@ -114,14 +114,15 @@ def _write_cache(repo_id: str, paths: list[str], truncated: bool) -> int:
     return len(paths)
 
 
-def capture_gitlab_tree(repo_id: str, gitlab_url: str, token: str | None) -> int:
-    """Capture a GitLab repo's file tree WITHOUT a full checkout — a blobless, no-checkout
+def capture_remote_tree(repo_id: str, remote_url: str, token: str | None,
+                        username: str = "oauth2") -> int:
+    """Capture a forge repo's file tree WITHOUT a full checkout — a blobless, no-checkout
     shallow clone (fetches tree objects only, not file contents) + ``git ls-tree``. This
     lets the file browser work before the first scan and after scan checkouts are cleaned,
     independent of the ephemeral scan workspace. Best-effort; raises on failure."""
     from src.webapi.ingestion import GIT_PROTOCOL_ENV, build_clone_url
 
-    clone_url = build_clone_url(gitlab_url, token or "")
+    clone_url = build_clone_url(remote_url, token or "", username)
     tmp = tempfile.mkdtemp(prefix="vigilo-tree-")
     env = {**os.environ, **GIT_PROTOCOL_ENV}
     try:

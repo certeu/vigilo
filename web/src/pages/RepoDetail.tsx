@@ -8,13 +8,14 @@ import { RepoSettingsDrawer } from "../components/RepoSettingsDrawer";
 import { StatusDot } from "../components/StatusDot";
 import { SEVERITY_COLORS } from "../lib/severity";
 
-// Build a commit web URL. GitLab uses /-/commit/<sha>; gitea/forgejo/codeberg use
-// /commit/<sha>. Best-effort — returns null if we can't parse the host.
-function commitUrl(gitlabUrl: string | null, sha: string | null): string | null {
-  if (!gitlabUrl || !sha) return null;
-  const base = gitlabUrl.replace(/\.git$/, "").replace(/\/$/, "");
+// Build a commit web URL. GitLab uses /-/commit/<sha>; GitHub and gitea/forgejo/codeberg
+// use /commit/<sha>. Best-effort — returns null if we can't parse the host.
+function commitUrl(remoteUrl: string | null, sha: string | null, forge?: string | null): string | null {
+  if (!remoteUrl || !sha) return null;
+  const base = remoteUrl.replace(/\.git$/, "").replace(/\/$/, "");
   try {
-    const seg = new URL(base).host.includes("gitlab") ? "/-/commit/" : "/commit/";
+    const gitlab = forge ? forge === "gitlab" : new URL(base).host.includes("gitlab");
+    const seg = gitlab ? "/-/commit/" : "/commit/";
     return base + seg + sha;
   } catch {
     return null;
@@ -96,7 +97,7 @@ export function RepoDetail() {
         </button>
       </div>
       <p className="mb-2 mono text-sm text-slate">
-        {repo.source_type}{repo.gitlab_url ? ` · ${repo.gitlab_url}` : ""}
+        {repo.source_type}{repo.remote_url ? ` · ${repo.remote_url}` : ""}
       </p>
       {repo.ingestion_status && repo.ingestion_status !== "idle" && (
         <p className="mb-6 text-sm">
@@ -111,9 +112,9 @@ export function RepoDetail() {
             }
           >
             {repo.ingestion_status === "importing"
-              ? (repo.source_type === "gitlab" ? "verifying access…" : "importing…")
+              ? (repo.source_type !== "upload" ? "verifying access…" : "importing…")
               : repo.ingestion_status === "ready"
-                ? (repo.source_type === "gitlab" ? "access verified" : "ready")
+                ? (repo.source_type !== "upload" ? "access verified" : "ready")
                 : `failed — ${repo.ingestion_error ?? "unknown error"}`}
           </span>
         </p>
@@ -197,9 +198,9 @@ export function RepoDetail() {
                 <td className="px-3 py-2 mono text-slate">{r.trigger_type}</td>
                 <td className="px-3 py-2 mono text-xs">
                   {r.commit_sha ? (
-                    commitUrl(repo.gitlab_url, r.commit_sha) ? (
+                    commitUrl(repo.remote_url, r.commit_sha, repo.forge) ? (
                       <a
-                        href={commitUrl(repo.gitlab_url, r.commit_sha)!}
+                        href={commitUrl(repo.remote_url, r.commit_sha, repo.forge)!}
                         target="_blank"
                         rel="noreferrer"
                         className="text-accent hover:underline"
@@ -248,7 +249,7 @@ export function RepoDetail() {
             <FileTree paths={tree.paths} />
           ) : (
             <div className="py-6 text-center text-sm text-slate">
-              {repo.source_type === "gitlab"
+              {repo.source_type !== "upload"
                 ? "File structure becomes available after the first scan clones the repository."
                 : "No files captured yet."}
             </div>

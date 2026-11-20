@@ -70,7 +70,7 @@ def _post(url: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
 async def redeem(
     secrets: dict[str, Any] | None, want: Iterable[str], *, timeout: float = 15.0,
 ) -> dict[str, str]:
-    """Redeem the requested secret kinds (``gitlab_token`` / ``cookie_header``).
+    """Redeem the requested secret kinds (``forge_token`` / ``cookie_header``).
 
     Every returned value is registered for masking in persisted output. Raises
     :class:`RedemptionRefused` / :class:`RedemptionUnavailable`; never includes the key

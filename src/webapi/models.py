@@ -56,10 +56,13 @@ class Credential(Base):
     owner_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id"), nullable=False, index=True
     )
-    kind: Mapped[str] = mapped_column(String(32), nullable=False)  # gitlab_token | cookie_header
+    # gitlab_token | github_token | github_app | cookie_header
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
     label: Mapped[str] = mapped_column(String(200), nullable=False)
     secret_enc: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
-    gitlab_base_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Forge credentials: the forge host the credential is bound to (host:port is
+    # compared with the repository URL). Was ``gitlab_base_url`` (migration 0009).
+    forge_base_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )
@@ -108,9 +111,13 @@ class Repository(Base):
         ForeignKey("users.id"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    source_type: Mapped[str] = mapped_column(String(16), nullable=False)  # upload | gitlab
-    gitlab_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    gitlab_project_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # upload | a forge name (gitlab | github), see src.services.forges
+    source_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    # Forge sources: the repository's web/clone URL and the forge's project id
+    # (GitLab webhooks match on it). Were ``gitlab_url`` / ``gitlab_project_id``
+    # (migration 0009).
+    remote_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    forge_project_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     default_credential_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("credentials.id"), nullable=True
     )
@@ -140,6 +147,11 @@ class Repository(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )
+
+    @property
+    def forge(self) -> str | None:
+        """The forge a non-upload repository lives on (``gitlab`` | ``github``)."""
+        return None if self.source_type == "upload" else self.source_type
 
 
 class RepositoryAccess(Base):

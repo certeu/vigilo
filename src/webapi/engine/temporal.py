@@ -18,6 +18,7 @@ import os
 from src.webapi.engine.common import (
     build_workflow_input,
     capture_source_info,
+    resolve_repo_token,
     drop_run_secrets,
     refresh_run,
 )
@@ -45,21 +46,8 @@ class TemporalEngine:
         return await Client.connect(get_settings().temporal_address)
 
     async def _resolve_token(self, credential_id, repo) -> str | None:
-        """Decrypt the repository owner's GitLab token. Re-checks owner, kind and host
-        binding right before decrypting; a failing check aborts the run start."""
-        from src.webapi.db import _session_maker
-        from src.webapi.credential_guard import CredentialRejected, validate_gitlab_credential
-        from src.webapi.models import Credential
-        from src.webapi.security.vault import build_vault
-        async with _session_maker()() as session:
-            cred = await session.get(Credential, credential_id)
-            if cred is None:
-                return None
-            try:
-                validate_gitlab_credential(cred, repo.created_by, repo.gitlab_url)
-            except CredentialRejected as exc:
-                raise RuntimeError(f"Repository credential refused: {exc}") from exc
-            return build_vault(get_settings()).decrypt(cred.secret_enc)
+        """The owner's forge token (checked, decrypted, or minted for a GitHub App)."""
+        return await resolve_repo_token(credential_id, repo)
 
     async def start(self, run: Run, job: Job, repo: Repository) -> None:
         from src.webapi.ingestion import (
@@ -71,11 +59,11 @@ class TemporalEngine:
         repo_dir = os.path.join(run.data_dir, "repo")
         os.makedirs(repo_dir, exist_ok=True)
 
-        # Materialize the source (clone GitLab / extract-or-copy upload) into the
+        # Materialize the source (clone from the forge / extract-or-copy upload) into the
         # shared volume the worker also mounts.
         token = None
         upload_path = None
-        if repo.source_type == "gitlab" and repo.default_credential_id:
+        if repo.source_type != "upload" and repo.default_credential_id:
             token = await self._resolve_token(repo.default_credential_id, repo)
         if repo.source_type == "upload":
             archive = upload_archive_path(settings.uploads_dir, str(repo.id))
@@ -84,7 +72,7 @@ class TemporalEngine:
         run.status = RUN_PREPARING
         prepare_repo(
             source_type=repo.source_type, repo_dir=repo_dir,
-            upload_path=upload_path, gitlab_url=repo.gitlab_url, token=token,
+            upload_path=upload_path, remote_url=repo.remote_url, token=token,
         )
         # Commit SHA + persistent browse-only file tree (best-effort).
         capture_source_info(run, repo, repo_dir)
@@ -100,7 +88,7 @@ class TemporalEngine:
                 pass
 
         # Everything per-run that is not a secret goes into the workflow input; the
-        # GitLab token (push) and the job's cookie header are stored as an encrypted
+        # forge token (push) and the job's cookie header are stored as an encrypted
         # per-run record and only a redemption reference travels in the input.
         input_data = await build_workflow_input(run, job, repo, repo_dir, token)
         from temporalio.common import WorkflowIDConflictPolicy
