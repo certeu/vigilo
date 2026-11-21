@@ -89,6 +89,9 @@ export function Jobs() {
     setError(null);
     setStarting(jobId);
     try {
+      // The run row is committed (status=queued) before the engine launch, so the
+      // API answers immediately; redirect right away instead of waiting for the
+      // run to leave "queued" (clone can take seconds on a big repo).
       const r = await api.runJob(jobId);
       navigate(`/runs/${r.id}`);
     } catch (err) {
