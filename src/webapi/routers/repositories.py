@@ -20,7 +20,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.webapi.ingestion import (
@@ -45,9 +45,12 @@ from urllib.parse import urlparse
 from src.webapi.credential_guard import CredentialRejected, validate_gitlab_credential
 from src.webapi.models import (
     ROLE_ADMIN,
+    RUN_TERMINAL,
     Credential,
+    Job,
     Repository,
     RepositoryAccess,
+    Run,
     User,
 )
 from src.webapi.schemas import (
@@ -231,10 +234,13 @@ async def create_repository(
 
 @router.get("/repositories", response_model=list[RepositoryRead])
 async def list_repositories(
+    include_archived: bool = False,
     user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> list[RepositoryRead]:
-    allowed = await accessible_repo_ids(session, user)
+    """List repositories visible to the user. Archived repos are hidden unless
+    ``include_archived=true`` (used by the UI's "show archived" filter)."""
+    allowed = await accessible_repo_ids(session, user, include_archived=include_archived)
     rows = (await session.scalars(select(Repository))).all()
     return [_to_read(r) for r in rows if allowed is None or r.id in allowed]
 
@@ -329,6 +335,27 @@ async def update_repository(
         revalidate = True
     if data.get("is_private") is not None:
         repo.is_private = data["is_private"]
+    if data.get("archived") is not None:
+        # Soft hide/restore. _require_owner_or_admin deliberately ignores the
+        # archive flag so an archived repo can still be unarchived through this
+        # same endpoint.
+        if data["archived"]:
+            # Archiving hides the repo and every run under it (lists, dashboard
+            # and direct URLs all 404). Refuse while a run is still in flight so
+            # an active scan never disappears from view mid-run.
+            active = (await session.scalars(
+                select(func.count(Run.id))
+                .join(Job, Job.id == Run.job_id)
+                .where(Job.repository_id == repo.id,
+                       Run.status.notin_(RUN_TERMINAL))
+            )).one()
+            if active:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(f"Cannot archive: {active} run(s) still in "
+                            "progress on this repository"),
+                )
+        repo.archived = data["archived"]
     if data.get("push_patches") is not None:
         if data["push_patches"] and repo.source_type != "gitlab":
             raise HTTPException(
