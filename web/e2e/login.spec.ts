@@ -82,3 +82,13 @@ test("create repo, job, and run shows the Trace Rail", async ({ page }) => {
   await expect(page.getByText("Trace Rail")).toBeVisible();
   await page.screenshot({ path: "e2e/artifacts/run-detail.png", fullPage: true });
 });
+
+test("expired session on a protected page redirects to /login with the session-expired message", async ({ page }) => {
+  // Seed a valid-looking token, load a protected page, then break the token:
+  // the next /api call 401s and the app must redirect to /login?reason=session_expired.
+  await page.goto("/login");
+  await page.evaluate(() => localStorage.setItem("vigilo_token", "EXPIRED.token.here"));
+  await page.goto("/runs");
+  await expect(page).toHaveURL(/\/login\?reason=session_expired/);
+  await expect(page.getByText("Your session has expired, please log in again.")).toBeVisible();
+});
