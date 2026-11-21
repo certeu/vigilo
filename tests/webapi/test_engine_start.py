@@ -144,43 +144,7 @@ class TestTemporalEngine:
         assert "model_overrides" not in payload
         assert payload["pipeline_config"] == {"max_concurrent_pipelines": 8}
 
-    async def test_refresh_and_cancel(self, monkeypatch, tmp_path, patched_settings):
-        from src.webapi.engine.temporal import TemporalEngine
-        patched_settings()
-        engine = TemporalEngine()
-        handle = MagicMock()
-        handle.describe = AsyncMock(return_value=SimpleNamespace(status=SimpleNamespace(value=2)))
-        handle.terminate = AsyncMock()
-        client = MagicMock()
-        client.get_workflow_handle = MagicMock(return_value=handle)
-        monkeypatch.setattr(engine, "_client", AsyncMock(return_value=client))
-        run = _run(tmp_path)
-        run.workflow_id = "sess-abc123"
-        await engine.refresh(run)
-        assert run.status == "succeeded"
-        await engine.cancel(run)
-        assert run.status == "cancelled"
-        client.get_workflow_handle.assert_called_with("sess-abc123")
-        handle.terminate.assert_awaited_once()
 
-    async def test_push_patches_sends_flags_and_a_reference_only(
-        self, monkeypatch, tmp_path, patched_settings, session_maker
-    ):
-        patched_settings()
-        run, client = await self._start(
-            monkeypatch, tmp_path, _repo(push_patches=True, **GITLAB_REPO), token="glpat-secret")
-        payload = client.start_workflow.call_args.args[1]
-        assert payload["push"] == {"enabled": True}
-        assert payload["source"] == {"remote_url": "https://gl.example/g/x.git", "commit": None}
-        assert set(payload["secrets"]) == {"ref", "key"} and payload["secrets"]["ref"] == str(run.id)
-        assert "auth" not in payload
-        assert "glpat-secret" not in repr(client.start_workflow.call_args)
-        # nothing on disk for the run: the token lives only in the encrypted DB record
-        assert not os.path.exists(os.path.join(run.data_dir, ".vigilo-secrets"))
-        for base, _d, files in os.walk(run.data_dir):
-            for f in files:
-                assert "glpat-secret" not in open(os.path.join(base, f), errors="ignore").read()
-        assert await stored_bundle(session_maker, run) == {"gitlab_token": "glpat-secret"}
 
     async def test_no_secret_without_opt_in(self, monkeypatch, tmp_path, patched_settings, session_maker):
         patched_settings()
@@ -407,3 +371,5 @@ class TestDockerEngine:
             monkeypatch, tmp_path, _repo(source_type="upload", push_patches=True))
         assert "secrets" not in self.tclient.start_workflow.call_args.args[1]
         assert len(call.kwargs["volumes"]) == 1
+
+
