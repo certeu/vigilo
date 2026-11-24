@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Literal
 
 from fastapi_users import schemas
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, field_validator, model_validator
 
 from src.webapi.models import ROLE_USER
 from src.types.config import RETRY_PRESETS as _RETRY_PRESETS, PipelineConfig
@@ -14,6 +14,9 @@ from src.types.stages import VALID_PRESETS
 
 
 class UserRead(schemas.BaseUser[uuid.UUID]):
+    # Input schemas validate emails. Stored legacy addresses must not turn a
+    # successful authentication into a 500 during response serialization.
+    email: str
     role: str
     created_at: datetime
 
@@ -406,7 +409,7 @@ class ScheduleRead(BaseModel):
 
 
 class InvitationCreate(BaseModel):
-    email: str
+    email: EmailStr
     role: Literal["admin", "user"] = "user"
 
 

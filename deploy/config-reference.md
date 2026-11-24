@@ -17,7 +17,7 @@ ready-to-edit starting point; this file is the exhaustive reference. See the
 
 | Variable | Meaning |
 |---|---|
-| `VIGILO_FIRST_ADMIN_EMAIL` | creates an initial admin if no user with this email exists |
+| `VIGILO_FIRST_ADMIN_EMAIL` | creates an initial admin if no user with this email exists; must pass standard email validation (reserved domains such as `.local` are rejected), or be blank to skip bootstrap |
 | `VIGILO_FIRST_ADMIN_PASSWORD` | its password |
 
 ## Execution

@@ -23,3 +23,21 @@ class TestAuthFlow:
         body = resp.json()
         assert body["email"] == "user@example.com"
         assert body["role"] == "user"
+
+    async def test_me_returns_legacy_special_use_email(self, client, session_maker):
+        await _make_user(
+            session_maker, "admin@vigilo.local", "passpass123", ROLE_USER
+        )
+        login = await client.post(
+            "/auth/jwt/login",
+            data={"username": "admin@vigilo.local", "password": "passpass123"},
+        )
+        assert login.status_code == 200
+        token = login.json()["access_token"]
+
+        resp = await client.get(
+            "/users/me", headers={"Authorization": f"Bearer {token}"}
+        )
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["email"] == "admin@vigilo.local"

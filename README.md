@@ -552,7 +552,7 @@ the exhaustive reference** (backends, SMTP, GitLab, proxies, pricing). The essen
 | `VIGILO_FERNET_KEY` | base64 Fernet key encrypting stored credential secrets. Required. |
 | `VIGILO_DATABASE_URL` | `postgresql+asyncpg://…` — Postgres is the only supported runtime datastore (SQLite is used only by the test suite). Set automatically in the full compose. |
 | `POSTGRES_PASSWORD` | Password for the bundled Postgres. Required. |
-| `VIGILO_FIRST_ADMIN_EMAIL` / `_PASSWORD` | Creates the initial admin on first boot if no user with that email exists. |
+| `VIGILO_FIRST_ADMIN_EMAIL` / `_PASSWORD` | Creates the initial admin on first boot if no user with that email exists. The email must pass standard validation; reserved domains such as `.local` are rejected. Leave blank to skip. |
 | `VIGILO_SMTP_HOST` / `_PORT` / `_FROM` | SMTP for invitation and report emails (`mailhog` in the full compose; unset disables email). For a real relay also set `VIGILO_SMTP_USER`, `_PASSWORD`, `_STARTTLS`. |
 | `VIGILO_UI_BASE_URL` | Public UI URL used in email links (default `https://$VIGILO_HOSTNAME`). |
 

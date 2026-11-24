@@ -49,6 +49,15 @@ class TestInvitations:
                                 json={"token": "nope", "password": "longenough1"})
         assert bad.status_code == 400
 
+    async def test_reject_special_use_email(self, client, admin_token):
+        resp = await client.post(
+            "/invitations",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"email": "invitee@vigilo.local", "role": "user"},
+        )
+
+        assert resp.status_code == 422
+
 
 class TestRepoConfigOverride:
     async def test_set_and_read_pipeline_config(self, client, user_token):
