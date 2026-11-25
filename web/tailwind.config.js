@@ -1,5 +1,5 @@
 /** @type {import('tailwindcss').Config} */
-// Design language per spec §16: Stripe-minimalism, cool near-white, one cobalt
+// Design language: Stripe-minimalism, cool near-white, one cobalt
 // accent, a desaturated severity ramp used ONLY on severity markers. Space Grotesk
 // for display/numerals, IBM Plex Sans for body, IBM Plex Mono for evidence.
 export default {
@@ -18,7 +18,14 @@ export default {
           high: "#C2410C",
           medium: "#B45309",
           low: "#4B5563",
-          info: "#8A93A3",
+          info: "#677082",
+        },
+        // Analyst hints (grey-box steering): the only use of this hue.
+        hint: {
+          DEFAULT: "#6D28D9",
+          soft: "#F5F3FF",
+          line: "#C4B5FD",
+          ink: "#5B21B6",
         },
       },
       fontFamily: {

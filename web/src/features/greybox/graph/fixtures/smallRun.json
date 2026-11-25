@@ -1,0 +1,420 @@
+{
+"nodes": [
+{
+"id": "4372c695be5548559e4f9a008e2d532e",
+"kind": "objective",
+"key": "objective",
+"label": "Assess https://example.test/ within scope",
+"status": "done",
+"agent_id": null,
+"work_order_id": null,
+"finding_id": null,
+"asset_id": null,
+"event_seq": null,
+"data": {},
+"version": 1,
+"severity": null,
+"outcome": "no_issue_found"
+},
+{
+"id": "1ad03b71857247bdb73db4311814371e",
+"kind": "reasoning",
+"key": "reasoning|1",
+"label": "Explorer cycle 1",
+"status": "active",
+"agent_id": null,
+"work_order_id": null,
+"finding_id": null,
+"asset_id": null,
+"event_seq": 13,
+"data": {},
+"version": 2,
+"severity": null,
+"outcome": null
+},
+{
+"id": "ebc0208b456747c6b976eceaaff37c87",
+"kind": "work_order",
+"key": "discovery.crawl||crawl-initial-shallow",
+"label": "discovery.crawl on https://example.test/",
+"status": "done",
+"agent_id": null,
+"work_order_id": null,
+"finding_id": null,
+"asset_id": null,
+"event_seq": 17,
+"data": {
+"tool": "discovery.crawl",
+"title": "Initial shallow crawl"
+},
+"version": 5,
+"severity": null,
+"outcome": "no_issue_found"
+},
+{
+"id": "76a25444b4494b9492ce160ea42365dc",
+"kind": "action",
+"key": "tc-5b42971eef054f8e89dbf8f04b988b75",
+"label": "discovery.crawl call",
+"status": "succeeded",
+"agent_id": null,
+"work_order_id": null,
+"finding_id": null,
+"asset_id": null,
+"event_seq": 21,
+"data": {
+"tool": "discovery.crawl"
+},
+"version": 5,
+"severity": null,
+"outcome": null
+},
+{
+"id": "5b3efc30963746ff83aedbfb8281f860",
+"kind": "observation",
+"key": "discovery.crawl|https://example.test/",
+"label": "GET / -> 200",
+"status": "recorded",
+"agent_id": null,
+"work_order_id": null,
+"finding_id": null,
+"asset_id": null,
+"event_seq": 57,
+"data": {},
+"version": 6,
+"severity": null,
+"outcome": null
+},
+{
+"id": "d6591b04f1f945298a88c9268c9d8801",
+"kind": "work_order",
+"key": "discovery.sitemap||sitemap-initial",
+"label": "discovery.sitemap on https://example.test/",
+"status": "done",
+"agent_id": null,
+"work_order_id": null,
+"finding_id": null,
+"asset_id": null,
+"event_seq": 16,
+"data": {
+"tool": "discovery.sitemap",
+"title": "Fetch sitemap.xml"
+},
+"version": 8,
+"severity": null,
+"outcome": "no_issue_found"
+},
+{
+"id": "dd41b459d4f44c9cbb332133133771bf",
+"kind": "action",
+"key": "tc-ec68cdc8db8f4ce79516ce0966cbb171",
+"label": "discovery.sitemap call",
+"status": "succeeded",
+"agent_id": null,
+"work_order_id": null,
+"finding_id": null,
+"asset_id": null,
+"event_seq": 87,
+"data": {
+"tool": "discovery.sitemap"
+},
+"version": 8,
+"severity": null,
+"outcome": null
+},
+{
+"id": "a29aed3fd9004a4db18e0983627e5aed",
+"kind": "observation",
+"key": "discovery.sitemap|https://example.test/sitemap.xml",
+"label": "sitemap.xml: 0 URLs",
+"status": "recorded",
+"agent_id": null,
+"work_order_id": null,
+"finding_id": null,
+"asset_id": null,
+"event_seq": 92,
+"data": {},
+"version": 9,
+"severity": null,
+"outcome": null
+},
+{
+"id": "d9837c9c6cb24b0cbc470832306e23c1",
+"kind": "work_order",
+"key": "discovery.robots||robots-initial",
+"label": "discovery.robots on https://example.test/",
+"status": "done",
+"agent_id": null,
+"work_order_id": null,
+"finding_id": null,
+"asset_id": null,
+"event_seq": 15,
+"data": {
+"tool": "discovery.robots",
+"title": "Fetch robots.txt"
+},
+"version": 11,
+"severity": null,
+"outcome": "no_issue_found"
+},
+{
+"id": "169a7d2e62e844a88186999f0e055755",
+"kind": "action",
+"key": "tc-01dbb4d36fda490aa0882257b8cf0294",
+"label": "discovery.robots call",
+"status": "succeeded",
+"agent_id": null,
+"work_order_id": null,
+"finding_id": null,
+"asset_id": null,
+"event_seq": 94,
+"data": {
+"tool": "discovery.robots"
+},
+"version": 11,
+"severity": null,
+"outcome": null
+},
+{
+"id": "dbfc6463e7b040968fac9697eff2fc89",
+"kind": "observation",
+"key": "discovery.robots|https://example.test/robots.txt",
+"label": "robots.txt: 1 paths",
+"status": "recorded",
+"agent_id": null,
+"work_order_id": null,
+"finding_id": null,
+"asset_id": null,
+"event_seq": 98,
+"data": {},
+"version": 12,
+"severity": null,
+"outcome": null
+},
+{
+"id": "ee0a90ddad2a4c3cb884693028ad03f4",
+"kind": "work_order",
+"key": "discovery.fetch_root||root-initial",
+"label": "discovery.fetch_root on https://example.test/",
+"status": "done",
+"agent_id": null,
+"work_order_id": null,
+"finding_id": null,
+"asset_id": null,
+"event_seq": 14,
+"data": {
+"tool": "discovery.fetch_root",
+"title": "Fetch root page"
+},
+"version": 14,
+"severity": null,
+"outcome": "no_issue_found"
+},
+{
+"id": "807282a2809243429e2d6fc6387de30a",
+"kind": "action",
+"key": "tc-87d90edec36e4e11b52881b87eea515f",
+"label": "discovery.fetch_root call",
+"status": "succeeded",
+"agent_id": null,
+"work_order_id": null,
+"finding_id": null,
+"asset_id": null,
+"event_seq": 100,
+"data": {
+"tool": "discovery.fetch_root"
+},
+"version": 14,
+"severity": null,
+"outcome": null
+},
+{
+"id": "9e25e90894304a60aa5438ac7958c7f3",
+"kind": "observation",
+"key": "discovery.fetch_root|https://example.test/",
+"label": "Root / answered 200",
+"status": "recorded",
+"agent_id": null,
+"work_order_id": null,
+"finding_id": null,
+"asset_id": null,
+"event_seq": 106,
+"data": {},
+"version": 15,
+"severity": null,
+"outcome": null
+},
+{
+"id": "d7d9357fddab47549e46f4d5d47397db",
+"kind": "lead",
+"key": "lead:llm:initial-surface",
+"label": "initial-surface",
+"status": "refuted",
+"agent_id": null,
+"work_order_id": null,
+"finding_id": null,
+"asset_id": null,
+"event_seq": null,
+"data": {},
+"version": 16,
+"severity": null,
+"outcome": "ruled_out"
+}
+],
+"edges": [
+{
+"id": "c08af19a83cf467182e8844bcd975d18",
+"src": "4372c695be5548559e4f9a008e2d532e",
+"dst": "1ad03b71857247bdb73db4311814371e",
+"rel": "spawned",
+"version": 2
+},
+{
+"id": "ea54d313b9bc449f90634f3d55ceea43",
+"src": "1ad03b71857247bdb73db4311814371e",
+"dst": "d7d9357fddab47549e46f4d5d47397db",
+"rel": "spawned",
+"version": 3
+},
+{
+"id": "bd736e2a158542828c769202de0a0be2",
+"src": "d7d9357fddab47549e46f4d5d47397db",
+"dst": "ee0a90ddad2a4c3cb884693028ad03f4",
+"rel": "spawned",
+"version": 3
+},
+{
+"id": "c8d8e7b4489f4394af23dc9d98acde64",
+"src": "ee0a90ddad2a4c3cb884693028ad03f4",
+"dst": "d7d9357fddab47549e46f4d5d47397db",
+"rel": "investigated",
+"version": 3
+},
+{
+"id": "11b8df6c07e645af9a185055d017c9d6",
+"src": "d7d9357fddab47549e46f4d5d47397db",
+"dst": "d9837c9c6cb24b0cbc470832306e23c1",
+"rel": "spawned",
+"version": 3
+},
+{
+"id": "44a81e4f80ab4f82a39352ac9570220b",
+"src": "d9837c9c6cb24b0cbc470832306e23c1",
+"dst": "d7d9357fddab47549e46f4d5d47397db",
+"rel": "investigated",
+"version": 3
+},
+{
+"id": "d5c6d72a2ba74b399cb870720e785548",
+"src": "d7d9357fddab47549e46f4d5d47397db",
+"dst": "d6591b04f1f945298a88c9268c9d8801",
+"rel": "spawned",
+"version": 3
+},
+{
+"id": "62f3cfe0414d45948e786b7be072f76e",
+"src": "d6591b04f1f945298a88c9268c9d8801",
+"dst": "d7d9357fddab47549e46f4d5d47397db",
+"rel": "investigated",
+"version": 3
+},
+{
+"id": "c5d04c4fa30d4d49aafac2a7f4a56448",
+"src": "d7d9357fddab47549e46f4d5d47397db",
+"dst": "ebc0208b456747c6b976eceaaff37c87",
+"rel": "spawned",
+"version": 3
+},
+{
+"id": "c0a3d136bc334e6087731d684d4af7f7",
+"src": "ebc0208b456747c6b976eceaaff37c87",
+"dst": "d7d9357fddab47549e46f4d5d47397db",
+"rel": "investigated",
+"version": 3
+},
+{
+"id": "c082f82672d24b1e8aa185dac01f1a9b",
+"src": "ebc0208b456747c6b976eceaaff37c87",
+"dst": "76a25444b4494b9492ce160ea42365dc",
+"rel": "executed",
+"version": 4
+},
+{
+"id": "9ad40d0b353e451aa4f3d733ff5614fa",
+"src": "76a25444b4494b9492ce160ea42365dc",
+"dst": "5b3efc30963746ff83aedbfb8281f860",
+"rel": "observed",
+"version": 6
+},
+{
+"id": "88c0d4fe7cab471fb5fd9f7127665656",
+"src": "d6591b04f1f945298a88c9268c9d8801",
+"dst": "dd41b459d4f44c9cbb332133133771bf",
+"rel": "executed",
+"version": 7
+},
+{
+"id": "43344e712e944c6ca83977628eda777c",
+"src": "dd41b459d4f44c9cbb332133133771bf",
+"dst": "a29aed3fd9004a4db18e0983627e5aed",
+"rel": "observed",
+"version": 9
+},
+{
+"id": "96fa38e48e6e4db4b88d3ef11dd98f26",
+"src": "d9837c9c6cb24b0cbc470832306e23c1",
+"dst": "169a7d2e62e844a88186999f0e055755",
+"rel": "executed",
+"version": 10
+},
+{
+"id": "5e9b1cb969c74e79b9abf84bef54e78a",
+"src": "169a7d2e62e844a88186999f0e055755",
+"dst": "dbfc6463e7b040968fac9697eff2fc89",
+"rel": "observed",
+"version": 12
+},
+{
+"id": "2ff17b7df0bb4fac9b2ec2c556c08c82",
+"src": "ee0a90ddad2a4c3cb884693028ad03f4",
+"dst": "807282a2809243429e2d6fc6387de30a",
+"rel": "executed",
+"version": 13
+},
+{
+"id": "17b2b8b669034548b0daef8babf56503",
+"src": "807282a2809243429e2d6fc6387de30a",
+"dst": "9e25e90894304a60aa5438ac7958c7f3",
+"rel": "observed",
+"version": 15
+},
+{
+"id": "1dba5f17afe74f439f801cf9057d5294",
+"src": "5b3efc30963746ff83aedbfb8281f860",
+"dst": "d7d9357fddab47549e46f4d5d47397db",
+"rel": "contradicts",
+"version": 16
+},
+{
+"id": "f1730175962842eabf0e9eb3099585fe",
+"src": "a29aed3fd9004a4db18e0983627e5aed",
+"dst": "d7d9357fddab47549e46f4d5d47397db",
+"rel": "contradicts",
+"version": 16
+},
+{
+"id": "e4a1c1bf246e4d0d8bf0da2bac2af509",
+"src": "dbfc6463e7b040968fac9697eff2fc89",
+"dst": "d7d9357fddab47549e46f4d5d47397db",
+"rel": "contradicts",
+"version": 16
+},
+{
+"id": "fc168d4afc234b79903e7a587699c045",
+"src": "9e25e90894304a60aa5438ac7958c7f3",
+"dst": "d7d9357fddab47549e46f4d5d47397db",
+"rel": "contradicts",
+"version": 16
+}
+]
+}

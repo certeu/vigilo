@@ -6,6 +6,7 @@ import { api, getToken, type Job, type Run, type TraceRailConfig } from "../api/
 import { TraceRail, type RailPhase } from "../components/TraceRail";
 import { StatusDot } from "../components/StatusDot";
 import { ReportImage } from "../components/ReportImage";
+import { statusLabel } from "../lib/status";
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
 
@@ -189,11 +190,11 @@ export function RunDetail() {
   useEffect(() => {
     if (!id || !isTerminal) return;
     fetch(`/api/runs/${id}/report`, { headers: { Authorization: `Bearer ${getToken()}` } })
-      .then((r) => r.json())
+      .then(async (r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d) => setReport(d.exists ? d.markdown : null))
       .catch(() => {});
     fetch(`/api/runs/${id}/artifacts`, { headers: { Authorization: `Bearer ${getToken()}` } })
-      .then((r) => r.json())
+      .then(async (r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d) => setArtifacts(Array.isArray(d.artifacts) ? d.artifacts : []))
       .catch(() => {});
   }, [id, isTerminal]);
@@ -257,7 +258,7 @@ export function RunDetail() {
         <StatusDot status={run.status} />
         <h1 className="text-xl font-semibold">Run {run.id.slice(0, 8)}</h1>
         <span className="mono text-sm text-slate">
-          {job?.stage_preset} · {run.status}
+          {job?.stage_preset} · {statusLabel(run.status)}
           {run.total_cost_usd != null ? ` · $${run.total_cost_usd.toFixed(2)}` : ""}
           {run.commit_sha ? ` · commit ${run.commit_sha.slice(0, 8)}` : ""}
         </span>

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vigilo"
-version = "2.0.0"
+version = "1.0.0"
 description = "Vigilo — AI Pentest Pipeline"
 requires-python = ">=3.11"
 dependencies = [
@@ -16,12 +16,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-greybox = [
-    # Pinned to the 1.x driver the grey-box graph client is written for: 3.x changed
-    # query results to one list per statement and broke schema init on fresh databases.
-    "surrealdb>=1.0.8,<2",
-    "httpx>=0.27.0",
-]
 webapi = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
@@ -41,14 +35,19 @@ webapi-test = [
     "aiosqlite>=0.20",
     "httpx>=0.28.1",
 ]
+browser = [
+    "playwright>=1.48",
+]
 
 [project.scripts]
 save-deliverable = "scripts.save_deliverable:main"
 vigilo-record = "scripts.vigilo_record:main"
-graph-tool = "scripts.graph_tool:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src", "scripts"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+markers = [
+    "slow: full end-to-end assessment runs; excluded from CI with -m 'not slow', run locally with a plain pytest",
+]

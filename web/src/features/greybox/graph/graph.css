@@ -1,0 +1,180 @@
+/* Exploration graph extras (loaded with the lazy graph chunk only). */
+
+.gx-canvas .react-flow__node {
+  /* Cards draw their own focus ring. */
+  outline: none;
+}
+
+.gx-handle {
+  opacity: 0;
+  width: 6px;
+  height: 6px;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  pointer-events: none;
+}
+
+/* New / updated nodes: a ring that fades out. Static (no animation) under reduced motion;
+   the "new" text badge carries the meaning either way. */
+.gx-fresh {
+  box-shadow: 0 0 0 3px rgba(59, 91, 219, 0.45), 0 1px 3px rgba(18, 22, 31, 0.06);
+}
+.gx-changed {
+  box-shadow: 0 0 0 2px rgba(59, 91, 219, 0.3), 0 1px 3px rgba(18, 22, 31, 0.06);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .gx-fresh {
+    animation: gx-arrive 900ms ease-out 1, gx-glow 6s ease-out 1 forwards;
+  }
+  .gx-changed {
+    animation: gx-glow 6s ease-out 1 forwards;
+  }
+  .gx-live > span:first-child {
+    animation: gx-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes gx-arrive {
+  from {
+    transform: scale(0.92);
+    opacity: 0.2;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes gx-glow {
+  0%,
+  60% {
+    box-shadow: 0 0 0 3px rgba(59, 91, 219, 0.5), 0 1px 3px rgba(18, 22, 31, 0.06);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 91, 219, 0), 0 1px 3px rgba(18, 22, 31, 0.06);
+  }
+}
+@keyframes gx-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* In-progress nodes: a pulsing dot in the card corner, plus a live-connection dot.
+   Both are static under reduced motion (the status chip text carries the meaning). */
+.gx-running-dot {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  z-index: 2;
+  width: 9px;
+  height: 9px;
+  border-radius: 9999px;
+  background: #3b5bdb;
+  box-shadow: 0 0 0 2px #fff;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .gx-running-dot::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: #3b5bdb;
+    animation: gx-ping 1.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+  .gx-live-dot {
+    animation: gx-pulse 1.6s ease-in-out infinite;
+  }
+}
+@keyframes gx-ping {
+  75%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+/* Keyboard focus: React Flow focuses the node wrapper; draw the ring on the card. */
+.gx-canvas .react-flow__node:focus-visible .gx-card {
+  outline: 2px solid #3b5bdb;
+  outline-offset: 3px;
+}
+.gx-canvas .react-flow__node {
+  cursor: pointer;
+}
+
+/* ---- Live state ---------------------------------------------------------- */
+/* Running: accent outline + a soft pulsing halo (static under reduced motion). */
+.gx-state-running {
+  box-shadow: 0 0 0 2px rgba(59, 91, 219, 0.55), 0 1px 3px rgba(18, 22, 31, 0.06);
+}
+/* Pending: dashed outline (from the category) on a slightly tinted background. */
+.gx-state-pending {
+  background-image: repeating-linear-gradient(135deg, rgba(96, 106, 123, 0.05) 0 6px, transparent 6px 12px);
+}
+.gx-state-failed {
+  box-shadow: 0 0 0 1px rgba(180, 35, 44, 0.25);
+}
+.gx-state-muted {
+  filter: saturate(0.7);
+}
+/* The agent's current reasoning cycle. */
+.gx-state-current {
+  box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.5), 0 1px 3px rgba(18, 22, 31, 0.06);
+}
+.gx-spinner {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 9999px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .gx-state-running {
+    animation: gx-halo 1.8s ease-in-out infinite;
+  }
+  .gx-state-thinking {
+    animation: gx-halo-indigo 1.6s ease-in-out infinite;
+  }
+  .gx-spinner {
+    animation: gx-spin 0.8s linear infinite;
+  }
+  .gx-thinking-badge {
+    animation: gx-pulse 1.4s ease-in-out infinite;
+  }
+}
+@keyframes gx-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes gx-halo {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(59, 91, 219, 0.7), 0 0 0 0 rgba(59, 91, 219, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(59, 91, 219, 0.7), 0 0 0 7px rgba(59, 91, 219, 0);
+  }
+}
+@keyframes gx-halo-indigo {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.7), 0 0 0 0 rgba(67, 56, 202, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.7), 0 0 0 9px rgba(67, 56, 202, 0);
+  }
+}
+
+/* Edges: live ones flow (React Flow's own `animated` dash) in the accent colour. */
+.gx-edge-live {
+  stroke: #3b5bdb !important;
+}

@@ -12,6 +12,11 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.api
+    env_file:
+      # the model backend credentials (ANTHROPIC_* / CODEX_* / LITELLM_*): the API
+      # resolves a run's model at start, the worker calls it
+      - path: ../.env
+        required: false
     environment:
       VIGILO_DATABASE_URL: postgresql+asyncpg://vigilo:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/vigilo
       VIGILO_JWT_SECRET: ${VIGILO_JWT_SECRET:?set a strong secret}
@@ -19,9 +24,67 @@ services:
       VIGILO_FIRST_ADMIN_EMAIL: ${VIGILO_FIRST_ADMIN_EMAIL:-}
       VIGILO_FIRST_ADMIN_PASSWORD: ${VIGILO_FIRST_ADMIN_PASSWORD:-}
       VIGILO_SERVE_UI: "false"
+      # Grey-box web platform (off by default; see deploy/config-reference.md). To
+      # enable: VIGILO_GREYBOX_WEB_ENABLED=true and run the greybox-worker service
+      # (profile `greybox`, below). VIGILO_API_PORT must match the published port.
+      VIGILO_GREYBOX_WEB_ENABLED: ${VIGILO_GREYBOX_WEB_ENABLED:-false}
+      VIGILO_GREYBOX_EXECUTOR: ${VIGILO_GREYBOX_EXECUTOR:-worker}
+      VIGILO_GREYBOX_ALLOW_PRIVATE_TARGETS: ${VIGILO_GREYBOX_ALLOW_PRIVATE_TARGETS:-false}
+      VIGILO_GREYBOX_BLOCKED_HOSTS: ${VIGILO_GREYBOX_BLOCKED_HOSTS:-}
+      VIGILO_GREYBOX_BLOCKED_ENDPOINTS: ${VIGILO_GREYBOX_BLOCKED_ENDPOINTS:-}
+      VIGILO_API_HOST: ${VIGILO_API_HOST:-0.0.0.0}
+      VIGILO_API_PORT: ${VIGILO_API_PORT:-8080}
+    image: vigilo-api:latest         # shared with greybox-worker (one build)
     ports: ["8080:8080"]
     depends_on: ["postgres"]
     profiles: ["api"]
+
+  # Grey-box executor process (opt-in: `--profile api --profile greybox`). Same image,
+  # database and settings as vigilo-api; no published port. Scale with --scale.
+  greybox-worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    image: vigilo-api:latest
+    env_file:
+      # the model backend credentials (ANTHROPIC_* / CODEX_* / LITELLM_*): the API
+      # resolves a run's model at start, the worker calls it
+      - path: ../.env
+        required: false
+    environment:
+      VIGILO_DATABASE_URL: postgresql+asyncpg://vigilo:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/vigilo
+      VIGILO_FERNET_KEY: ${VIGILO_FERNET_KEY:?generate with python -c "from src.webapi.security.vault import generate_key; print(generate_key())"}
+      # Platform secrets this process never needs: blank them (it runs an AI agent).
+      VIGILO_JWT_SECRET: ""
+      POSTGRES_PASSWORD: ""
+      VIGILO_SMTP_USER: ""
+      VIGILO_SMTP_PASSWORD: ""
+      VIGILO_FIRST_ADMIN_EMAIL: ""
+      VIGILO_FIRST_ADMIN_PASSWORD: ""
+      VIGILO_RUN_MIGRATIONS_ON_START: "false"     # vigilo-api owns migrations
+      VIGILO_GREYBOX_WEB_ENABLED: ${VIGILO_GREYBOX_WEB_ENABLED:-true}
+      VIGILO_GREYBOX_EXECUTOR: worker
+      VIGILO_GREYBOX_ALLOW_PRIVATE_TARGETS: ${VIGILO_GREYBOX_ALLOW_PRIVATE_TARGETS:-false}
+      VIGILO_GREYBOX_BLOCKED_HOSTS: ${VIGILO_GREYBOX_BLOCKED_HOSTS:-}
+      VIGILO_GREYBOX_BLOCKED_ENDPOINTS: ${VIGILO_GREYBOX_BLOCKED_ENDPOINTS:-}
+      VIGILO_GREYBOX_WORKER_MAX_RUNS: ${VIGILO_GREYBOX_WORKER_MAX_RUNS:-2}
+      # auto | bwrap | unshare | process. "auto" refuses agent-written code when no
+      # OS isolation works (Docker's default seccomp blocks user namespaces);
+      # "process" accepts interpreter-level isolation only (see deploy/config-reference.md).
+      VIGILO_GREYBOX_SANDBOX_ISOLATION: ${VIGILO_GREYBOX_SANDBOX_ISOLATION:-auto}
+      VIGILO_GREYBOX_LEASE_TTL_S: ${VIGILO_GREYBOX_LEASE_TTL_S:-60}
+      VIGILO_GREYBOX_HEARTBEAT_S: ${VIGILO_GREYBOX_HEARTBEAT_S:-10}
+      VIGILO_API_HOST: ${VIGILO_API_HOST:-0.0.0.0}
+      VIGILO_API_PORT: ${VIGILO_API_PORT:-8080}
+    command: ["python", "-m", "src.greybox_web.worker"]
+    # Enable generated-tool namespaces only on this isolated worker. The worker
+    # drops every capability except those used to launch bubblewrap as nobody.
+    security_opt: ["seccomp=unconfined", "apparmor=unconfined"]
+    cap_drop: ["ALL"]
+    cap_add: ["SETUID", "SETGID"]
+    depends_on: ["postgres", "vigilo-api"]
+    restart: unless-stopped
+    profiles: ["api", "greybox"]
 
 volumes:
   vigilo_pg:

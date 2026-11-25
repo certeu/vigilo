@@ -1,0 +1,316 @@
+{
+  "fixture": "ledgerline_api",
+  "name": "Ledgerline",
+  "mode": "web",
+  "target": "Ledgerline billing API (tests/greybox_web/fixtures/ledgerline_api)",
+  "technology": [
+    "JSON REST API",
+    "OpenAPI 3.0",
+    "bearer tokens",
+    "cursor pagination",
+    "multi-tenant"
+  ],
+  "functionality": [
+    "credential-for-token exchange (POST /v1/auth/token, JSON or form body, opaque bearer token)",
+    "current user (/v1/me)",
+    "organisation profile, members and admin-only billing settings",
+    "customers with pagination and filtering (email, q, country)",
+    "invoices with status/customer filters and cursor pagination; per-customer invoices",
+    "payments reached from invoices via payment_id / _links.payment (undocumented endpoint)",
+    "organisation audit trail",
+    "role-checked invoice creation and update (POST/PATCH; not needed for any seeded issue)"
+  ],
+  "accounts": [
+    {
+      "label": "nadia",
+      "user": "nadia",
+      "password": "Nadia-Ledger-7731!x",
+      "role": "admin",
+      "org": "org_7Hq2"
+    },
+    {
+      "label": "omar",
+      "user": "omar",
+      "password": "Omar-View-4096#q",
+      "role": "viewer",
+      "org": "org_7Hq2"
+    },
+    {
+      "label": "greta",
+      "user": "greta",
+      "password": "Greta-Books-2210$k",
+      "role": "accountant",
+      "org": "org_K9pX"
+    }
+  ],
+  "login": {
+    "path": "/v1/auth/token",
+    "user_field": "username",
+    "password_field": "password",
+    "body": "json or form",
+    "token": "access_token in JSON response, sent as Authorization: Bearer"
+  },
+  "resources": [
+    {
+      "path": "/",
+      "auth": false,
+      "documented": false,
+      "note": "JSON index with _links to /v1 and /openapi.json"
+    },
+    {
+      "path": "/openapi.json",
+      "auth": false,
+      "documented": false,
+      "note": "OpenAPI 3.0.3; public by design"
+    },
+    {
+      "path": "/v1",
+      "auth": false,
+      "documented": false,
+      "note": "Link: </openapi.json>; rel=\"service-desc\""
+    },
+    {
+      "path": "POST /v1/auth/token",
+      "auth": false,
+      "documented": true
+    },
+    {
+      "path": "GET /v1/me",
+      "auth": true,
+      "documented": true
+    },
+    {
+      "path": "GET /v1/orgs/{org_id}",
+      "auth": true,
+      "documented": true
+    },
+    {
+      "path": "GET /v1/orgs/{org_id}/customers",
+      "auth": true,
+      "documented": true,
+      "params": [
+        "limit",
+        "cursor",
+        "email",
+        "q",
+        "country"
+      ]
+    },
+    {
+      "path": "GET /v1/orgs/{org_id}/customers/{customer_id}",
+      "auth": true,
+      "documented": true
+    },
+    {
+      "path": "GET /v1/orgs/{org_id}/customers/{customer_id}/invoices",
+      "auth": true,
+      "documented": true
+    },
+    {
+      "path": "GET /v1/orgs/{org_id}/invoices",
+      "auth": true,
+      "documented": true,
+      "params": [
+        "status",
+        "customer_id",
+        "limit",
+        "cursor"
+      ]
+    },
+    {
+      "path": "POST /v1/orgs/{org_id}/invoices",
+      "auth": true,
+      "documented": true,
+      "x-required-role": "accountant",
+      "state_changing": true
+    },
+    {
+      "path": "GET /v1/orgs/{org_id}/invoices/{invoice_id}",
+      "auth": true,
+      "documented": true
+    },
+    {
+      "path": "PATCH /v1/orgs/{org_id}/invoices/{invoice_id}",
+      "auth": true,
+      "documented": true,
+      "x-required-role": "accountant",
+      "state_changing": true
+    },
+    {
+      "path": "GET /v1/orgs/{org_id}/members",
+      "auth": true,
+      "documented": true
+    },
+    {
+      "path": "GET /v1/orgs/{org_id}/settings",
+      "auth": true,
+      "documented": true,
+      "x-required-role": "admin"
+    },
+    {
+      "path": "GET /v1/orgs/{org_id}/audit-events",
+      "auth": true,
+      "documented": true,
+      "x-required-role": "admin"
+    },
+    {
+      "path": "GET /v1/payments/{payment_id}",
+      "auth": true,
+      "documented": false
+    }
+  ],
+  "seeded": [
+    {
+      "id": "B1",
+      "title": "Function-level authorisation missing on the organisation audit trail",
+      "expected": "Confirmed vulnerability (vertical privilege escalation / BFLA)",
+      "class": "vulnerability",
+      "where": "GET /v1/orgs/{org_id}/audit-events",
+      "evidence": "The OpenAPI operation listAuditEvents carries x-required-role: admin. As omar (viewer, org_7Hq2), GET /v1/orgs/org_7Hq2/audit-events returns 200 with the full trail (actor e-mails, source IPs, user agents, actions) identical to what nadia (admin) receives. Tenant isolation holds: greta gets 404.",
+      "discovery": "Read the OpenAPI document, note x-required-role annotations, and replay each role-restricted operation with the lower-privileged identity of the same organisation (settings is correctly enforced; audit-events is not).",
+      "verification": "Two identities of the same org: the admin's and the viewer's responses are both 200 with audit_event objects; the viewer's response contains other members' e-mails / IPs. Mentioning that the spec requires admin.",
+      "requires": [
+        "schema analysis",
+        "two roles in the same organisation"
+      ],
+      "match": {
+        "location_regex": "/v1/orgs/[^/]+/audit-events",
+        "text_regex": "(?i)audit|role|privilege|admin|viewer|authori|bfla|function"
+      },
+      "must_be_verified": true
+    },
+    {
+      "id": "B2",
+      "title": "Undocumented payment endpoint lacks a tenant check (cross-tenant BOLA)",
+      "expected": "Confirmed vulnerability (broken object-level authorisation across tenants)",
+      "class": "vulnerability",
+      "where": "GET /v1/payments/{payment_id} (absent from /openapi.json)",
+      "evidence": "Paid Northwind invoices carry payment_id and _links.payment (e.g. /v1/payments/pay_abxz6f0de0kXWd). As greta (Globex, org_K9pX), GET of that URL returns 200 with org_id org_7Hq2, amount, card brand/last4/expiry, payer e-mail and name.",
+      "discovery": "Follow hypermedia links / the payment_id relationship from invoices to an endpoint the spec does not list; harvest pay_ ids as a Northwind user (nadia or omar) and replay them with greta's token.",
+      "verification": "A Northwind payment id obtained from a Northwind identity's invoice is fetched with the Globex identity's token and returns 200 with org_id org_7Hq2.",
+      "requires": [
+        "hypermedia / relationship following",
+        "undocumented endpoint",
+        "cross-identity id harvesting",
+        "two tenants"
+      ],
+      "match": {
+        "location_regex": "/v1/payments/",
+        "text_regex": "(?i)payment|tenant|org|bola|idor|object|authori|cross|access"
+      },
+      "must_be_verified": true
+    },
+    {
+      "id": "B3",
+      "title": "Invoice pagination cursor is not bound to the tenant",
+      "expected": "Confirmed vulnerability (cross-tenant data exposure)",
+      "class": "vulnerability",
+      "where": "GET /v1/orgs/{org_id}/invoices?cursor=...",
+      "evidence": "next_cursor is base64url of {\"org\":\"org_K9pX\",\"offset\":10}. As greta, GET /v1/orgs/org_K9pX/invoices?cursor=eyJvcmciOiJvcmdfN0hxMiIsIm9mZnNldCI6MH0 (= {\"org\":\"org_7Hq2\",\"offset\":0}) returns 200 with Northwind invoices (org_id org_7Hq2, NW-2025-xxxx numbers). Membership is checked against the path org only.",
+      "discovery": "Decode next_cursor (base64url JSON), recognise the embedded org id, re-encode it with the other tenant's id and replay against the caller's own org path.",
+      "verification": "A forged cursor naming the other organisation, sent by an identity of the first organisation to its OWN org path, returns invoices whose org_id is the other organisation.",
+      "requires": [
+        "decoding the cursor (custom tool)",
+        "two tenants"
+      ],
+      "match": {
+        "location_regex": "/v1/orgs/[^/]+/invoices",
+        "text_regex": "(?i)cursor|paginat|page.?token|offset"
+      },
+      "must_be_verified": true,
+      "match_note": "The finding must concern the pagination cursor; 'org'/'tenant' alone matched unrelated invoice findings (scoring corrected 2026-11-23)."
+    }
+  ],
+  "negative_controls": [
+    {
+      "id": "NC1",
+      "where": "every /v1/orgs/{org_id}/... path",
+      "truth": "tenant membership enforced: greta gets 404 on any org_7Hq2 path (org, customers, invoices, members, settings, audit-events)",
+      "false_positive_if": {
+        "location_regex": "/v1/orgs/org_7Hq2(/(customers|members|settings)(/[^/?]+)?)?(\\?|$)",
+        "text_regex": "(?i)tenant|cross|bola|idor|other org|isolation"
+      }
+    },
+    {
+      "id": "NC2",
+      "where": "GET /v1/orgs/{org_id}/settings",
+      "truth": "admin-only, enforced: omar (viewer) and greta (accountant, own org) get 403",
+      "false_positive_if": {
+        "location_regex": "/v1/orgs/[^/]+/settings",
+        "text_regex": "(?i)role|privilege|authori|bfla|viewer|admin|function"
+      }
+    },
+    {
+      "id": "NC3",
+      "where": "GET /v1/orgs/{org_id}/customers/{customer_id} and .../invoices/{invoice_id}",
+      "truth": "objects looked up inside the path org only: another org's customer/invoice id under one's own org path is 404",
+      "false_positive_if": {
+        "location_regex": "/v1/orgs/[^/]+/(customers|invoices)/[a-z]+_[A-Za-z0-9]+",
+        "text_regex": "(?i)idor|bola|object|other tenant|cross|ownership"
+      }
+    },
+    {
+      "id": "NC4",
+      "where": "GET /v1/orgs/{org_id}/customers?cursor=...",
+      "truth": "the customers cursor is validated against the path org: a forged cursor naming another org gets 400 invalid_cursor",
+      "false_positive_if": {
+        "location_regex": "/v1/orgs/[^/]+/customers(\\?|$)",
+        "text_regex": "(?i)cursor|pagina|tenant|cross"
+      }
+    },
+    {
+      "id": "NC5",
+      "where": "GET /openapi.json",
+      "truth": "the public API description is intentional; at most informational",
+      "false_positive_if": {
+        "location_regex": "/openapi\\.json",
+        "text_regex": "(?i)openapi|swagger|spec|schema|disclos|exposed"
+      },
+      "allowed_classes": [
+        "informational"
+      ]
+    },
+    {
+      "id": "NC6",
+      "where": "all responses",
+      "truth": "X-RateLimit-Limit/Remaining/Reset present; Content-Type application/json; X-Content-Type-Options: nosniff; Cache-Control: no-store",
+      "false_positive_if": {
+        "location_regex": ".",
+        "text_regex": "(?i)rate.?limit (missing|absent|not present)|missing rate|x-content-type-options|content-type (missing|incorrect)|cache-control"
+      }
+    },
+    {
+      "id": "NC7",
+      "where": "all responses",
+      "truth": "no Access-Control-Allow-Origin for any (foreign) origin",
+      "false_positive_if": {
+        "location_regex": ".",
+        "text_regex": "(?i)cors|access-control-allow-origin"
+      }
+    },
+    {
+      "id": "NC8",
+      "where": "every /v1 endpoint except /v1 and POST /v1/auth/token",
+      "truth": "unauthenticated or invalid-token calls get 401 with WWW-Authenticate: Bearer, including /v1/payments/{id}",
+      "false_positive_if": {
+        "location_regex": "/v1/",
+        "text_regex": "(?i)unauthenticated access|without (a )?(token|authentication)|no authentication|missing authentication|auth(entication)? bypass"
+      }
+    }
+  ],
+  "expected_observations": [
+    "The service is API-only: / returns JSON with _links; there is no HTML UI",
+    "OpenAPI 3.0 document at /openapi.json (linked from / and the Link rel=service-desc header on /v1)",
+    "Bearer token auth via POST /v1/auth/token (JSON or form)",
+    "x-required-role annotations on settings (admin), audit-events (admin), POST/PATCH invoices (accountant)",
+    "Three identities across two tenants: nadia admin and omar viewer at org_7Hq2, greta accountant at org_K9pX",
+    "Cursor pagination with base64url-JSON cursors {org, offset}",
+    "Invoices link to /v1/payments/{id}, which is not in the OpenAPI document"
+  ],
+  "fp_policy": {
+    "unmatched_allowed_classes": [
+      "informational",
+      "hardening"
+    ]
+  }
+}

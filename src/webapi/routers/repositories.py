@@ -112,9 +112,18 @@ async def _require_owner_or_admin(session, user, repo_id) -> Repository:
     repo = await session.get(Repository, repo_id)
     if repo is None:
         raise HTTPException(status_code=404, detail="Repository not found")
-    if not is_owner_or_admin(user, repo):
-        raise HTTPException(status_code=403, detail="Only the owner or an admin may do this")
+    _deny_non_owner(user, repo, "Only the owner or an admin may do this")
     return repo
+
+
+def _deny_non_owner(user, repo, detail: str) -> None:
+    """Owner/admin only. A PRIVATE repo the caller does not own is 404 (never confirm it
+    exists, same as GET); a team-visible one is 403."""
+    if is_owner_or_admin(user, repo):
+        return
+    if repo.is_private:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    raise HTTPException(status_code=403, detail=detail)
 
 
 async def _make_gitlab_credential(session, user, label, token, base_url):
@@ -359,11 +368,7 @@ async def delete_repository(
         # Private repos the caller can't see must 404 (no existence leak); otherwise
         # a no-op 204 is fine (already gone).
         raise HTTPException(status_code=404, detail="Repository not found")
-    if not is_owner_or_admin(user, repo):
-        # 404 not 403 for a private repo the caller can't see; 403 for a visible one.
-        if repo.is_private and user.role != ROLE_ADMIN:
-            raise HTTPException(status_code=404, detail="Repository not found")
-        raise HTTPException(status_code=403, detail="Not your repository")
+    _deny_non_owner(user, repo, "Not your repository")
     from src.webapi.deletion import delete_repository as _delete_repo
     await _delete_repo(session, engine, repo_id)
     await session.commit()

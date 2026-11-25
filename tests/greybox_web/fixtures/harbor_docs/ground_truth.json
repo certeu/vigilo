@@ -1,0 +1,336 @@
+{
+  "fixture": "harbor_docs",
+  "name": "Harbor Docs",
+  "target": "Harbor Docs (tests/greybox_web/fixtures/harbor_docs)",
+  "mode": "web",
+  "technology": [
+    "server-rendered HTML + JSON API",
+    "cookie session",
+    "workflow states",
+    "CSRF token (meta tag / X-CSRF-Token)",
+    "progressive-enhancement JS"
+  ],
+  "functionality": [
+    "form login at /login and JSON login at /api/login (cookie session harbor_session)",
+    "dashboard with the caller's projects and recently viewed documents",
+    "project list, project page with documents (state, author) and current members",
+    "document page and version history (pages fetch /api/documents/{id} and /versions)",
+    "document shares and share links /s/{token} with expiry",
+    "approval requests for documents in review; approve/reject (approver permission)",
+    "team activity feed (HTML page renders the JSON feed filtered to the viewer's projects)",
+    "profile with current and historical project memberships",
+    "ownership transfer of a document (author or project lead)"
+  ],
+  "accounts": [
+    {
+      "label": "erin",
+      "user": "erin",
+      "password": "Harbor-Erin-7q!Lw2c",
+      "role": "lead/approver"
+    },
+    {
+      "label": "dave",
+      "user": "dave",
+      "password": "Harbor-Dave-4m!Tz8k",
+      "role": "member (removed from atlas)"
+    },
+    {
+      "label": "finn",
+      "user": "finn",
+      "password": "Harbor-Finn-9k!Rv3p",
+      "role": "member"
+    }
+  ],
+  "login": {
+    "path": "/login",
+    "user_field": "username",
+    "password_field": "password",
+    "body": "form (also JSON at /api/login)"
+  },
+  "resources": [
+    {
+      "type": "team",
+      "id": "meridian",
+      "members": [
+        "erin (lead, approver)",
+        "dave",
+        "finn"
+      ]
+    },
+    {
+      "type": "project",
+      "id": "atlas",
+      "visibility": "private",
+      "members": [
+        "erin (lead)"
+      ],
+      "former_members": [
+        {
+          "user": "dave",
+          "removed_at": "2026-11-16T15:42:00Z"
+        }
+      ],
+      "documents": [
+        "d-a71f30 approved 'Atlas — vendor contract renewal terms'",
+        "d-a79e15 in_review 'Atlas — partner acquisition shortlist'"
+      ]
+    },
+    {
+      "type": "project",
+      "id": "beacon",
+      "visibility": "team",
+      "members": [
+        "erin (lead)",
+        "dave",
+        "finn"
+      ],
+      "documents": [
+        "d-b2e641 approved 'Beacon — onboarding guide' (3 versions)",
+        "d-b25d07 draft by erin 'Beacon — 2027 roadmap' (2 versions)",
+        "d-b2981a in_review by dave 'Beacon — release checklist 4.2'",
+        "d-b2c3f9 archived 'Beacon — 2025 retrospective'"
+      ]
+    },
+    {
+      "type": "project",
+      "id": "cobalt",
+      "visibility": "private",
+      "members": [
+        "finn (lead)"
+      ],
+      "notes": "erin reads non-draft cobalt documents as team approver",
+      "documents": [
+        "d-c3f812 in_review 'Cobalt — layoffs scenario Q3'",
+        "d-c30a77 draft 'Cobalt — restructuring cost model'"
+      ]
+    },
+    {
+      "type": "approval",
+      "ids": [
+        "apr-5c21 (d-b2981a, pending)",
+        "apr-9e47 (d-c3f812, pending)",
+        "apr-1b08 (d-a71f30, approved)"
+      ]
+    },
+    {
+      "type": "share_link",
+      "ids": [
+        "/s/x7Qe2LwV0b-old-onboarding (expired, listed in d-b2e641 shares)",
+        "/s/Rk9vPq3ZsT1mYc8NwA5eHd2L (valid, atlas d-a71f30; full URL shown only to its creator erin)"
+      ]
+    }
+  ],
+  "workflows": [
+    {
+      "name": "document approval",
+      "states": [
+        "draft",
+        "in_review",
+        "approved",
+        "archived"
+      ],
+      "rules": [
+        "a draft is visible only to its author (other project members see its title and state in the project list, never its content)",
+        "in_review documents are visible to project members and to team approvers",
+        "only approvers may decide an approval request (approve -> approved, reject -> draft)",
+        "only the author or the project lead may transfer ownership, to a current project member"
+      ]
+    },
+    {
+      "name": "project membership",
+      "rules": [
+        "access to a private project's metadata and documents requires CURRENT membership (removed_at null)",
+        "removed members keep a membership record with removed_at for history; it grants nothing",
+        "team approvers may read non-draft documents of any team project"
+      ]
+    }
+  ],
+  "invariants": [
+    "a user who is not a current member of a project cannot read its documents or metadata through any interface",
+    "a draft's content is readable only by its author, through every interface (document, versions, shares)",
+    "the team activity feed only reveals events of projects the caller can open",
+    "removing a member revokes access immediately on every interface",
+    "expired share links grant nothing",
+    "state-changing actions require the right role and a CSRF token"
+  ],
+  "seeded": [
+    {
+      "id": "C1",
+      "title": "Team activity feed discloses private-project metadata to non-members",
+      "expected": "Confirmed vulnerability (information disclosure, CWE-200/CWE-359)",
+      "class": "vulnerability",
+      "where": "GET /api/teams/meridian/activity",
+      "evidence": "As dave, GET /api/projects/cobalt returns 403 and cobalt is absent from GET /api/projects, yet GET /api/teams/meridian/activity returns events with project 'cobalt', document titles such as 'Cobalt — layoffs scenario Q3' and 'Cobalt — restructuring cost model', document ids and the acting user (finn, erin). The HTML /activity page filters these out client-side.",
+      "discovery": "Open the Activity page and observe the JSON it fetches (or GET the API directly); compare the projects in the feed with /api/projects and the access decision of /api/projects/cobalt.",
+      "verification": "Identity dave (never a cobalt member); resource cobalt events in /api/teams/meridian/activity; expected boundary: feed limited to projects dave can open; observed: cobalt project name, titles and actors returned (200); control interface: /api/projects/cobalt -> 403 and /api/documents/d-c3f812 -> 403 for dave.",
+      "requires": [
+        "one low-privilege identity",
+        "cross-resource correlation (feed vs project access decision)",
+        "looking past the client-side filter"
+      ],
+      "match": {
+        "location_regex": "/api/teams/[^/]+/activity",
+        "text_regex": "(?i)activity|feed|private|cobalt|metadata|disclos|leak|expos|non-member|not a member"
+      },
+      "must_be_verified": true
+    },
+    {
+      "id": "C2",
+      "title": "Draft content readable by project members through the versions interface",
+      "expected": "Confirmed vulnerability (state-dependent authorisation bypass, CWE-285/CWE-639)",
+      "class": "vulnerability",
+      "where": "GET /api/documents/{id}/versions and /api/documents/{id}/versions/{n}",
+      "evidence": "As dave (or finn), GET /api/documents/d-b25d07 (erin's draft in beacon) returns 404, but GET /api/documents/d-b25d07/versions lists 2 versions with excerpts and GET /api/documents/d-b25d07/versions/2 returns the full draft content ('Sunset the Harbor Classic tier in Q2 2027; ...').",
+      "discovery": "Beacon project page / GET /api/projects/beacon/documents lists d-b25d07 with state 'draft' (title only); the activity feed also references it. The document API's links and the Version history page expose the versions interface.",
+      "verification": "Identity dave (current beacon member, not the author); resource d-b25d07 in state draft; expected boundary: draft content only for the author; observed: versions/2 returns 200 with content; control interface: /api/documents/d-b25d07 -> 404 for dave and 200 for erin.",
+      "requires": [
+        "two identities (author and member) or the workflow-state rule",
+        "testing a related interface of the same object"
+      ],
+      "match": {
+        "location_regex": "/api/documents/d-b25d07/versions",
+        "text_regex": "."
+      },
+      "must_be_verified": true,
+      "match_note": "Scored by the vulnerable object: any non-rejected finding on the draft's versions interface (d-b25d07 is the only draft readable by other members). Wording-based rules both over- and under-credited (corrected 2026-11-23, applied to all runs)."
+    },
+    {
+      "id": "C3",
+      "title": "Removed project member keeps read access to the project's documents",
+      "expected": "Confirmed vulnerability (broken access control after membership change, CWE-284/CWE-613)",
+      "class": "vulnerability",
+      "where": "GET /api/documents/{id} (atlas documents)",
+      "evidence": "As dave, /api/me lists atlas with removed_at 2026-11-16T15:42:00Z; GET /api/projects/atlas and /api/projects/atlas/documents return 403; GET /api/documents/d-a71f30 (in dave's /api/me/recent from 2026-11-13) still returns 200 with the full contract terms, as does d-a79e15 (created after his removal, id in the activity feed). finn, never an atlas member, gets 403 on the same ids.",
+      "discovery": "/api/me (membership history with removed_at), /api/me/recent and the dashboard's 'Recently viewed' list (atlas entries from before the removal); the activity feed also references atlas documents.",
+      "verification": "Identity dave (former atlas member, removed_at set); resource d-a71f30; expected boundary: current membership required; observed: 200 with content; control interfaces: /api/projects/atlas -> 403 for dave, /api/documents/d-a71f30 -> 403 for finn, /api/documents/d-a71f30/versions -> 403 for dave.",
+      "requires": [
+        "membership history",
+        "workflow transition (removal)",
+        "a second identity or interface as control"
+      ],
+      "match": {
+        "location_regex": "/api/documents/(d-a71f30|d-a79e15)/?([?#].*)?$",
+        "text_regex": "(?i)dave|removed|former|stale|revok|membership|ex-member|no longer"
+      },
+      "must_be_verified": true,
+      "match_note": "Scored by the vulnerable object (atlas documents) and the affected identity (the removed member, dave) or removal wording (corrected 2026-11-23, applied to all runs)."
+    }
+  ],
+  "negative_controls": [
+    {
+      "id": "NC1",
+      "where": "GET /api/projects/{id}, /api/projects/{id}/documents, /api/projects/{id}/members",
+      "truth": "current membership (or approver permission) enforced: dave gets 403 on atlas and cobalt",
+      "false_positive_if": {
+        "location_regex": "/api/projects/[^/]+(/documents|/members)?/?$",
+        "text_regex": "(?i)authori|access control|idor|bola|readable|non-member|removed|former"
+      }
+    },
+    {
+      "id": "NC2",
+      "where": "GET /api/documents/{cobalt id} as dave",
+      "truth": "denied (403): dave was never a cobalt member",
+      "false_positive_if": {
+        "location_regex": "/api/documents/d-c3[0-9a-f]{4}/?$",
+        "text_regex": "(?i)authori|access|idor|bola|readable|cobalt"
+      }
+    },
+    {
+      "id": "NC3",
+      "where": "GET /api/documents/{id} of a draft as a non-author",
+      "truth": "404: the protected interface enforces the draft rule (the leak is only via versions, C2)",
+      "false_positive_if": {
+        "location_regex": "/api/documents/[^/]+/?$",
+        "text_regex": "(?is)^(?!.*(removed|former|stale|revok|membership|ex-member)).*draft"
+      }
+    },
+    {
+      "id": "NC4",
+      "where": "GET /s/x7Qe2LwV0b-old-onboarding",
+      "truth": "expired share link returns 410",
+      "false_positive_if": {
+        "location_regex": "/s/[^/]+",
+        "text_regex": "(?i)expir|share link|still (valid|works|accessible)"
+      }
+    },
+    {
+      "id": "NC5",
+      "where": "POST /api/approvals/{id}/decision",
+      "truth": "approver only (dave/finn get 403) and CSRF token required",
+      "false_positive_if": {
+        "location_regex": "/api/approvals/[^/]+/decision",
+        "text_regex": "(?i)authori|privilege|approver|role|bypass|csrf|cross-site request"
+      }
+    },
+    {
+      "id": "NC6",
+      "where": "GET /api/approvals/{id}",
+      "truth": "visible to approvers and the requester only (dave gets 403 on apr-9e47)",
+      "false_positive_if": {
+        "location_regex": "/api/approvals/[^/]+/?$",
+        "text_regex": "(?i)authori|idor|bola|readable|access"
+      }
+    },
+    {
+      "id": "NC7",
+      "where": "POST /api/documents/{id}/transfer",
+      "truth": "author or project lead only, target must be a current member, CSRF token required",
+      "false_positive_if": {
+        "location_regex": "/api/documents/[^/]+/transfer",
+        "text_regex": "(?i)authori|privilege|owner|transfer|csrf|bypass"
+      }
+    },
+    {
+      "id": "NC8",
+      "where": "GET /api/documents/{id}/shares",
+      "truth": "current membership enforced (dave gets 403 on atlas documents); active link tokens shown only to their creator",
+      "false_positive_if": {
+        "location_regex": "/api/documents/[^/]+/shares",
+        "text_regex": "(?i)authori|idor|readable|access|token|share"
+      }
+    },
+    {
+      "id": "NC9",
+      "where": "all responses",
+      "truth": "Content-Security-Policy (frame-ancestors 'none'), X-Content-Type-Options: nosniff, Referrer-Policy: same-origin and X-Frame-Options: DENY are present",
+      "false_positive_if": {
+        "location_regex": ".",
+        "text_regex": "(?i)(missing|absent|no|lack\\w*)\\W+(\\w+\\W+){0,3}(content-security-policy|csp|x-content-type-options|nosniff|referrer-policy|x-frame-options|clickjack)"
+      }
+    },
+    {
+      "id": "NC10",
+      "where": "Set-Cookie harbor_session",
+      "truth": "HttpOnly and SameSite=Lax",
+      "false_positive_if": {
+        "location_regex": ".",
+        "text_regex": "(?i)(httponly|samesite)\\W+(\\w+\\W+){0,4}(missing|not set|absent|disabled)|cookie\\W+(\\w+\\W+){0,3}(without|lacks|missing)\\W+(httponly|samesite)"
+      }
+    },
+    {
+      "id": "NC11",
+      "where": "/api/* responses",
+      "truth": "no Access-Control-Allow-Origin header is ever sent; Origin is not reflected",
+      "false_positive_if": {
+        "location_regex": ".",
+        "text_regex": "(?i)cors|access-control-allow-origin|origin reflect"
+      }
+    }
+  ],
+  "expected_observations": [
+    "dave's /api/me shows the atlas membership with removed_at (membership history)",
+    "dave's /api/me/recent and dashboard list atlas documents viewed before the removal",
+    "the beacon project document list shows d-b25d07 as a draft (title only) to dave and finn",
+    "the HTML Activity page fetches /api/teams/meridian/activity and /api/projects and filters client-side",
+    "the document page links the version history; /api/documents/{id} includes links.versions",
+    "erin has approver permission and sees two pending approval requests",
+    "the expired share link is listed (with its URL) in d-b2e641's shares and returns 410",
+    "state-changing endpoints require a CSRF token (meta tag csrf-token, X-CSRF-Token header or csrf_token field)"
+  ],
+  "fp_policy": {
+    "unmatched_allowed_classes": [
+      "informational",
+      "hardening"
+    ]
+  }
+}

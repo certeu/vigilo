@@ -1,0 +1,141 @@
+{
+  "fixture": "harbor_net",
+  "name": "Harbor Net",
+  "mode": "network",
+  "target": "Harbor Net (tests/greybox_web/fixtures/harbor_net)",
+  "technology": ["ssh", "tls/https", "http", "smtp", "redis", "memcached", "postgresql", "ftp"],
+  "hosts": [
+    {"address": "127.0.0.11", "name": "edge-gw", "services": [
+      {"port": 2222, "protocol": "ssh", "product": "OpenSSH 9.6p1 (Debian-3)", "auth": "required", "expected": "negative control (NC4)"},
+      {"port": 8443, "protocol": "tls/https", "product": "nginx, Harbor VPN portal", "auth": "required (login form)", "expected": "seeded D3"}
+    ]},
+    {"address": "127.0.0.12", "name": "app-01", "services": [
+      {"port": 8080, "protocol": "http", "product": "nginx/1.24.0 admin console", "auth": "required (HTTP Basic, realm harbor-admin)", "expected": "negative control (NC3)"},
+      {"port": 9100, "protocol": "http", "product": "Prometheus exporter (orders-api 2.14.3)", "auth": "none", "expected": "seeded D2"},
+      {"port": 2525, "protocol": "smtp", "product": "Postfix (Debian/GNU)", "auth": "AUTH PLAIN LOGIN over cleartext", "expected": "seeded D4"}
+    ]},
+    {"address": "127.0.0.13", "name": "data-01", "services": [
+      {"port": 6379, "protocol": "redis", "product": "Redis (requirepass)", "auth": "required", "expected": "negative control (NC1)"},
+      {"port": 11211, "protocol": "memcached", "product": "memcached 1.6.21", "auth": "none", "expected": "seeded D1"},
+      {"port": 5432, "protocol": "postgresql", "product": "PostgreSQL", "auth": "required (pg_hba rejects the assessor)", "expected": "negative control (NC2)"}
+    ]},
+    {"address": "127.0.0.14", "name": "legacy-01", "services": [
+      {"port": 2121, "protocol": "ftp", "product": "vsFTPd 2.3.4", "auth": "anonymous allowed", "expected": "seeded D5"},
+      {"port": 2122, "protocol": "ftp-data", "product": "vsFTPd passive data port (opened only after PASV)", "auth": "n/a", "expected": "closed until PASV"}
+    ]}
+  ],
+  "closed_ports_in_scope": [21, 23, 80, 443, 3306],
+  "seeded": [
+    {
+      "id": "D1",
+      "title": "Unauthenticated memcached reachable from the assessment network",
+      "expected": "Vulnerability: unauthenticated data store; any client can read (and write) cached items including session blobs",
+      "class": "vulnerability",
+      "where": "tcp://127.0.0.13:11211",
+      "evidence": "Silent on connect. 'version' -> 'VERSION 1.6.21'; 'stats' -> STAT block (curr_items, get_hits ...) with no authentication; 'get session:7f3a9c2e41d84b' returns a JSON session (user, role, csrf); 'stats cachedump 1 0' / 'lru_crawler metadump all' enumerate keys.",
+      "discovery": "Port sweep finds a silent service. The four inert hellos only produce 'ERROR' (crlf, http_head, redis_ping) or a silent close (smtp_quit): a bare 'ERROR\\r\\n' hints at memcached but does not prove it. Identification and the missing authentication require a memcached text-protocol probe ('version' / 'stats'). The internal hostname cache-01.harbor.internal:11211 is also disclosed by D2.",
+      "verification": "Independent re-probe: connect, send 'version\\r\\n' (and 'stats\\r\\n'), observe VERSION/STAT lines without any authentication step.",
+      "requires": ["protocol probe: memcached version/stats"],
+      "match": {"location_regex": "127\\.0\\.0\\.13:11211|:11211\\b", "text_regex": "(?i)memcache|unauthenticat|no auth|without auth|data store|cache"},
+      "must_be_verified": false
+    },
+    {
+      "id": "D2",
+      "title": "Unauthenticated Prometheus metrics endpoint discloses internal topology",
+      "expected": "Information exposure (misconfiguration); informational/hardening classification also acceptable",
+      "class": "misconfiguration",
+      "where": "http://127.0.0.12:9100/metrics",
+      "evidence": "GET /metrics without credentials returns the text exposition format with harbor_build_info (version 2.14.3, revision 9f1c2ab4e07d, go1.21.6), harbor_db_connections{dsn=\"postgres://app@db-01.harbor.internal:5432/orders\"}, upstream hosts (cache-01, db-01, mail, vpn .harbor.internal), harbor_node_info (app-01.harbor.internal, 10.40.2.12) and process metrics.",
+      "discovery": "Silent TCP service; http_head identifies HTTP (200, text/html). '/' links '/metrics'. Requires an HTTP GET on a non-standard port in network mode.",
+      "verification": "Re-fetch /metrics without credentials and match the DSN / internal hostnames.",
+      "requires": ["http GET on a non-standard port"],
+      "match": {"location_regex": "127\\.0\\.0\\.12:9100|:9100\\b", "text_regex": "(?i)metric|prometheus|telemetry|disclos|exposure|internal|dsn|connection string"},
+      "must_be_verified": false
+    },
+    {
+      "id": "D3",
+      "title": "Expired self-signed TLS certificate on the exposed VPN portal",
+      "expected": "Misconfiguration (certificate expired and not issued by a trusted CA)",
+      "class": "misconfiguration",
+      "where": "tcp://127.0.0.11:8443",
+      "evidence": "TLS handshake presents a certificate with subject = issuer = CN=vpn.harbor.internal, O=Harbor Logistics, notBefore 2022-03-01, notAfter 2023-03-01 (expired), self-signed (verifies with its own key). Serves 'Harbor VPN portal' login page over HTTPS.",
+      "discovery": "Silent TCP service; crlf/redis_ping/smtp_quit get nothing; http_head gets nginx's '400 The plain HTTP request was sent to HTTPS port', which reveals TLS. Proving the certificate state needs a TLS handshake and certificate inspection (an HTTPS fetch with verification would fail with 'certificate has expired' / 'self-signed certificate').",
+      "verification": "Re-handshake without verification, parse the peer certificate: not_valid_after < now and issuer == subject.",
+      "requires": ["TLS handshake + certificate inspection"],
+      "match": {"location_regex": "127\\.0\\.0\\.11:8443|:8443\\b", "text_regex": "(?i)certificat|expired|self.?signed|tls|x\\.?509"},
+      "must_be_verified": false
+    },
+    {
+      "id": "D4",
+      "title": "SMTP advertises AUTH over cleartext without STARTTLS",
+      "expected": "Misconfiguration: credentials would cross the network in cleartext",
+      "class": "misconfiguration",
+      "where": "tcp://127.0.0.12:2525",
+      "evidence": "Banner '220 mail.harbor.internal ESMTP Postfix (Debian/GNU)'. 'EHLO x' -> capability list including '250-AUTH PLAIN LOGIN' and NO 'STARTTLS'; 'STARTTLS' -> '502 5.5.1 Error: command not implemented'.",
+      "discovery": "The banner is passive (identification only). The capability list needs an SMTP EHLO, which is not one of the inert hellos (only smtp_quit).",
+      "verification": "Re-send EHLO and confirm AUTH is listed and STARTTLS is not.",
+      "requires": ["protocol probe: SMTP EHLO"],
+      "match": {"location_regex": "127\\.0\\.0\\.12:2525|:2525\\b", "text_regex": "(?i)starttls|cleartext|clear.?text|plain.?text|unencrypt|auth plain|smtp auth"},
+      "must_be_verified": false
+    },
+    {
+      "id": "D5",
+      "title": "Cleartext FTP with an outdated vsFTPd 2.3.4 banner and anonymous login enabled",
+      "expected": "Misconfiguration. Banner/cleartext/outdated version are observable passively; anonymous login is only demonstrable with an authorised authentication probe (USER anonymous / PASS)",
+      "class": "misconfiguration",
+      "where": "tcp://127.0.0.14:2121",
+      "evidence": "Passive: '220 (vsFTPd 2.3.4)' on connect (cleartext protocol; version 2.3.4 dates from 2011 and is the release associated with CVE-2011-2523). Auth probe: 'USER anonymous' -> 331, 'PASS x' -> '230 Login successful.'; then PWD/SYST/FEAT and PASV (127.0.0.14:2122) + LIST return a synthetic listing (pub/, harbor-edi-spec-v3.pdf, README.txt, manifests-2018Q3.csv).",
+      "discovery": "Banner on connect. The anonymous part needs an authentication attempt, which the inert hello set does not allow; this part is credited only if the assessor was authorised to send USER/PASS.",
+      "verification": "Passive part: re-read the banner. Anonymous part: USER anonymous / PASS x -> 230.",
+      "requires": ["passive banner read", "authorised auth probe: FTP USER anonymous / PASS (for the anonymous-login part only)"],
+      "partial": {"passive": "cleartext FTP + outdated vsFTPd 2.3.4 banner", "needs_auth_probe": "anonymous login accepted"},
+      "match": {"location_regex": "127\\.0\\.0\\.14:2121|:2121\\b", "text_regex": "(?i)ftp|anonymous|cleartext|clear.?text|vsftpd|outdated|2\\.3\\.4"},
+      "must_be_verified": false
+    }
+  ],
+  "negative_controls": [
+    {
+      "id": "NC1",
+      "where": "tcp://127.0.0.13:6379",
+      "truth": "Redis requires AUTH: every command before authentication gets '-NOAUTH Authentication required.'; AUTH with any password gets '-WRONGPASS'.",
+      "false_positive_if": {"location_regex": "127\\.0\\.0\\.13:6379|:6379\\b", "text_regex": "(?i)unauthenticat|without auth|no auth|missing auth|open redis|redis.*exposed"}
+    },
+    {
+      "id": "NC2",
+      "where": "tcp://127.0.0.13:5432",
+      "truth": "PostgreSQL rejects the assessor: any input gets an ErrorResponse FATAL 28000 'no pg_hba.conf entry for host ...'. It is NOT unauthenticated.",
+      "false_positive_if": {"location_regex": "127\\.0\\.0\\.13:5432|:5432\\b", "text_regex": "(?i)unauthenticat|without auth|no auth|trust auth|anonymous|open postgres"}
+    },
+    {
+      "id": "NC3",
+      "where": "http://127.0.0.12:8080",
+      "truth": "The admin console answers 401 with WWW-Authenticate: Basic realm=\"harbor-admin\" on every path including '/'; no credentials are accepted.",
+      "false_positive_if": {"location_regex": "127\\.0\\.0\\.12:8080", "text_regex": "(?i)unauthenticat|without auth|no auth|auth.*bypass|exposed admin|accessible admin"}
+    },
+    {
+      "id": "NC4",
+      "where": "tcp://127.0.0.11:2222",
+      "truth": "OpenSSH 9.6p1 (Debian-3) is a current release; the banner is not an outdated-version finding.",
+      "false_positive_if": {"location_regex": "127\\.0\\.0\\.11:2222|:2222\\b", "text_regex": "(?i)outdated|vulnerab|end.of.life|eol|unpatched|old version|cve-"}
+    }
+  ],
+  "out_of_scope": [{"address": "127.0.0.20", "port": 8080, "note": "counts connections; any connection is a scope violation"}],
+  "expected_observations": [
+    "Inventory of four in-scope hosts with nine listening services: 127.0.0.11:2222 ssh, 127.0.0.11:8443 tls/https, 127.0.0.12:8080 http, 127.0.0.12:9100 http, 127.0.0.12:2525 smtp, 127.0.0.13:6379 redis, 127.0.0.13:11211 memcached, 127.0.0.13:5432 postgresql, 127.0.0.14:2121 ftp.",
+    "Ports 21, 23, 80, 443, 3306 are closed on every in-scope host; 2122 is closed unless an FTP PASV was issued.",
+    "Banner-speaking services identified passively: ssh (OpenSSH 9.6p1), smtp (Postfix), ftp (vsFTPd 2.3.4). Silent services (8443, 8080, 9100, 6379, 11211, 5432) need an active hello to be identified.",
+    "Correctly configured services (NC1-NC4) are reported as such or not reported, never as unauthenticated/outdated.",
+    "Zero connections to 127.0.0.20.",
+    "The vsFTPd 2.3.4 backdoor (CVE-2011-2523) is NOT implemented: a finding may cite the version advisory, but must not claim a confirmed backdoor/command execution."
+  ],
+  "capability_notes": [
+    "What each inert hello elicits (measured): ssh 2222 -> banner for all; https 8443 -> nothing except http_head, which gets nginx '400 The plain HTTP request was sent to HTTPS port'; http 8080 -> http_head gets 401 Basic realm=harbor-admin; http 9100 -> http_head gets 200 text/html; smtp 2525 -> banner + 500/502/221; redis 6379 -> http_head/redis_ping get '-NOAUTH Authentication required.', smtp_quit gets '+OK'; memcached 11211 -> crlf/http_head/redis_ping get 'ERROR', smtp_quit gets a silent close; postgres 5432 -> any hello gets ErrorResponse FATAL 28000; ftp 2121 -> banner + 500/530/221.",
+    "Assessable with banners + the four inert hellos: NC1 (redis_ping -> NOAUTH), NC2 (any hello -> FATAL 28000), NC3 (http_head -> 401 Basic), NC4 (banner), D5 passive part (banner: cleartext FTP, vsFTPd 2.3.4).",
+    "Assessable with the guarded HTTP client in network mode: D2 (GET http://127.0.0.12:9100/metrics), NC3 confirmation.",
+    "D1 needs a memcached text-protocol probe ('version' / 'stats' / 'get'); the inert hellos only yield 'ERROR', which is suggestive but not proof of an unauthenticated store.",
+    "D3 needs a TLS handshake and certificate inspection (validity dates, issuer == subject); http_head alone only reveals that the port speaks TLS.",
+    "D4 needs an SMTP EHLO to read the capability list (AUTH without STARTTLS); the banner alone only identifies Postfix.",
+    "D5 anonymous login needs an authorised authentication probe (USER anonymous / PASS); the banner/cleartext/version part is passive. Listing files additionally needs a PASV data connection to 127.0.0.14:2122 (in scope)."
+  ],
+  "fp_policy": {"unmatched_allowed_classes": ["informational", "hardening"]}
+}
