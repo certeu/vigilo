@@ -9,7 +9,7 @@ The report is the product. Every finding carries reproducible evidence, an
 independent verification, a classification (confirmed vulnerability,
 misconfiguration, hardening, informational), a severity rationale, concrete
 remediation and a retest procedure. Defenders also get WAF, web-server and detection
-rules. Vigilo states what it did **not** cover as plainly as what it found.
+rules. Vigilo makes clear not only what it found, but also what it did not cover.
 
 Vigilo is built by **CERT-EU**. It runs as a multi-user web platform (API, worker and
 UI) with two modes:
