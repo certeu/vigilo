@@ -174,7 +174,12 @@ class TestAdmissionWithBackgroundLaunch:
             *[client.post(f"/jobs/{job['id']}/run", headers=h) for _ in range(8)]
         )
         assert all(r.status_code == 201 for r in results)
-        await asyncio.sleep(0.2)  # let the background launches reach engine.start
+        # Let the background launches reach engine.start (poll: runner speed varies).
+        for _ in range(100):
+            if len(started) >= 2:
+                break
+            await asyncio.sleep(0.05)
+        await asyncio.sleep(0.2)  # grace period: a 3rd launch would show up here
 
         statuses = [r["status"] for r in (await client.get("/runs", headers=h)).json()]
         active = sum(1 for s in statuses if s in ("preparing", "running"))
