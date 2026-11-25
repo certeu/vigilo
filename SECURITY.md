@@ -38,9 +38,8 @@ Treat it as a security tool that handles hostile input:
   or Postgres outside the Docker network, and set strong values for `POSTGRES_PASSWORD`,
   `VIGILO_JWT_SECRET` and `VIGILO_FERNET_KEY`.
 
-Running each scan in its own isolated sandbox container is the planned next step; the design is
-in [`docs/design/agent-sandbox.md`](docs/design/agent-sandbox.md). Until then, prefer running one
-scan at a time when scanning repositories you do not trust.
+Running each scan in its own isolated sandbox container is the planned next step. Until then,
+prefer running one scan at a time when scanning repositories you do not trust.
 
 ## See also
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import socket
 import subprocess
 import tarfile
 import tempfile
@@ -27,6 +28,25 @@ def upload_archive_path(uploads_dir: str, repo_id: str) -> str:
 
 def upload_tree_dir(uploads_dir: str, repo_id: str) -> str:
     return os.path.join(uploads_dir, repo_id)
+
+
+def _is_appledouble(name: str) -> bool:
+    """macOS AppleDouble sidecar (``._file``), added by a Mac's tar next to every file."""
+    return name.rstrip("/").rsplit("/", 1)[-1].startswith("._")
+
+
+def archive_kind(path: str) -> str | None:
+    """``"zip"`` or ``"tar"`` (plain, gzip, bzip2 or xz) from the file's CONTENT, not
+    its name: uploads are stored as ``<repo id>.zip`` whatever their format (see
+    :func:`upload_archive_path`), so the extension cannot be trusted."""
+    if zipfile.is_zipfile(path):
+        return "zip"
+    try:
+        if tarfile.is_tarfile(path):
+            return "tar"
+    except (OSError, tarfile.TarError):
+        pass
+    return None
 
 
 def is_archive_name(name: str) -> bool:
@@ -87,18 +107,22 @@ def extract_archive(archive_path: str, dest_dir: str) -> str:
     # Stage on the same filesystem as dest_dir so the flatten step is a rename, not a copy.
     staging_dir = tempfile.mkdtemp(prefix=".extract-", dir=dest_dir)
     try:
-        if archive_path.endswith(".zip"):
+        kind = archive_kind(archive_path)
+        if kind == "zip":
             with zipfile.ZipFile(archive_path) as zf:
                 for member in zf.namelist():
                     if not _is_safe_member(member):
                         raise ValueError(f"unsafe archive member: {member!r}")
-                zf.extractall(staging_dir)
-        elif archive_path.endswith((".tar.gz", ".tgz", ".tar")):
+                zf.extractall(staging_dir, members=[
+                    m for m in zf.namelist() if not _is_appledouble(m)])
+        elif kind == "tar":
             with tarfile.open(archive_path) as tf:
                 # filter='data' (py3.12+) strips absolute paths / traversal / special files.
-                tf.extractall(staging_dir, filter="data")
+                tf.extractall(staging_dir, filter="data", members=[
+                    m for m in tf.getmembers() if not _is_appledouble(m.name)])
         else:
-            raise ValueError(f"unsupported archive type: {archive_path!r}")
+            raise ValueError("not a .zip or .tar(.gz) archive: "
+                             f"{os.path.basename(archive_path)!r}")
         _flatten_extracted(staging_dir, dest_dir)
     finally:
         shutil.rmtree(staging_dir, ignore_errors=True)
@@ -119,9 +143,8 @@ def validate_upload(upload_path: str) -> int:
         if count == 0:
             raise ValueError("uploaded folder contains no files")
         return count
-    if upload_path.endswith(".zip"):
-        if not zipfile.is_zipfile(upload_path):
-            raise ValueError("not a valid .zip archive")
+    kind = archive_kind(upload_path)
+    if kind == "zip":
         with zipfile.ZipFile(upload_path) as zf:
             names = zf.namelist()
             for m in names:
@@ -131,7 +154,7 @@ def validate_upload(upload_path: str) -> int:
             if not files:
                 raise ValueError("archive contains no files")
             return len(files)
-    if upload_path.endswith((".tar.gz", ".tgz", ".tar")):
+    if kind == "tar":
         try:
             with tarfile.open(upload_path) as tf:
                 members = [m for m in tf.getmembers() if m.isfile()]
@@ -140,7 +163,7 @@ def validate_upload(upload_path: str) -> int:
         if not members:
             raise ValueError("archive contains no files")
         return len(members)
-    raise ValueError(f"unsupported archive type: {os.path.basename(upload_path)!r}")
+    raise ValueError("not a valid .zip or .tar(.gz) archive")
 
 
 # Only real network git transports are allowed — never file://, ext::, ssh://, etc.
@@ -159,6 +182,86 @@ GIT_PROTOCOL_ENV = {
     "GIT_CONFIG_GLOBAL": "/dev/null",
     "GIT_CONFIG_NOSYSTEM": "1",
 }
+
+
+# ---------------------------------------------------------------------------------
+# SSRF guard for repository hosts. A user-supplied gitlab_url is fetched server-side
+# (git ls-remote / clone), so it must not reach loopback, private, link-local,
+# metadata, multicast or reserved addresses unless the host is explicitly allowlisted
+# (VIGILO_GITLAB_ALLOWED_HOSTS, or the host of the worker's GITLAB_URL). The policy is
+# greybox_web.netguard's classify_ip (shared, not duplicated). The resolved address is
+# pinned into git via http.curloptResolve so DNS cannot change between check and use;
+# redirects are disabled so a 3xx cannot bounce git to an unchecked host.
+# ---------------------------------------------------------------------------------
+_getaddrinfo = socket.getaddrinfo   # indirection so tests can stub DNS
+
+
+def _allowed_git_hosts(settings) -> set[str]:
+    hosts = {h.strip().lower().rstrip(".")
+             for h in (settings.gitlab_allowed_hosts or "").split(",") if h.strip()}
+    env_url = os.environ.get("GITLAB_URL", "").strip()
+    if env_url:
+        h = (urlparse(env_url if "//" in env_url else "//" + env_url).hostname or "").lower()
+        if h:
+            hosts.add(h.rstrip("."))
+    return hosts
+
+
+def resolve_git_host(gitlab_url: str, settings=None) -> tuple[str, int, list[str]]:
+    """Resolve and vet the host of ``gitlab_url``. Returns ``(host, port, ips)``;
+    raises ValueError if the host (or ANY address it resolves to) is not allowed."""
+    from src.greybox_web.netguard import ip_denial, parse_ip
+    from src.webapi.settings import get_settings
+    settings = settings or get_settings()
+    p = urlparse(gitlab_url)
+    host = (p.hostname or "").lower().rstrip(".")
+    if not host:
+        raise ValueError("repository URL has no host")
+    scheme = (p.scheme or "https").lower()
+    port = p.port or (443 if scheme == "https" else 80)
+    allowlisted = host in _allowed_git_hosts(settings)
+    # Allowlisted hosts may be private (an internal GitLab); the always-denied classes
+    # (metadata, link-local, multicast, reserved, unspecified) are refused regardless.
+    allow_private = allowlisted or bool(settings.repo_allow_private_hosts)
+    literal = parse_ip(host)
+    if literal is not None:
+        ips = [str(literal)]
+    else:
+        try:
+            infos = _getaddrinfo(host, port, type=socket.SOCK_STREAM)
+        except OSError as exc:
+            raise ValueError(f"cannot resolve repository host {host!r}") from exc
+        ips = sorted({i[4][0] for i in infos})
+        if not ips:
+            raise ValueError(f"cannot resolve repository host {host!r}")
+    for ip in ips:
+        reason = ip_denial(ip, allow_private=allow_private)
+        if reason:
+            raise ValueError(
+                f"repository host {host!r} is not allowed ({reason}); ask an admin to "
+                "add it to VIGILO_GITLAB_ALLOWED_HOSTS if it is your GitLab"
+            )
+    return host, port, ips
+
+
+def guarded_git_env(gitlab_url: str, settings=None) -> dict:
+    """Environment for a git subprocess against ``gitlab_url``: vets the host, pins
+    the vetted address (no DNS rebinding) and refuses redirects."""
+    host, port, ips = resolve_git_host(gitlab_url, settings)
+    env = {**os.environ, **GIT_PROTOCOL_ENV}
+    cfg = [("http.followRedirects", "false")]
+    if parse_ip_literal(host) is None:
+        cfg.append(("http.curloptResolve", f"{host}:{port}:{','.join(ips)}"))
+    env["GIT_CONFIG_COUNT"] = str(len(cfg))
+    for i, (k, v) in enumerate(cfg):
+        env[f"GIT_CONFIG_KEY_{i}"] = k
+        env[f"GIT_CONFIG_VALUE_{i}"] = v
+    return env
+
+
+def parse_ip_literal(host: str):
+    from src.greybox_web.netguard import parse_ip
+    return parse_ip(host)
 
 
 def _require_web_scheme(gitlab_url: str) -> str:
@@ -202,10 +305,10 @@ def validate_gitlab_access(gitlab_url: str, token: str | None, runner=subprocess
     clone, via ``git ls-remote``. Returns the number of refs. Raises RuntimeError on
     failure (token scrubbed from the message)."""
     clone_url = build_clone_url(gitlab_url, token or "")
+    env = guarded_git_env(gitlab_url)   # SSRF guard + DNS pin (raises ValueError)
     result = runner(
         ["git", "ls-remote", "--heads", clone_url],
-        capture_output=True, text=True, timeout=45,
-        env={**os.environ, **GIT_PROTOCOL_ENV},
+        capture_output=True, text=True, timeout=45, env=env,
     )
     if result.returncode != 0:
         detail = (result.stderr or "").replace(clone_url, "<clone-url>")
@@ -215,13 +318,14 @@ def validate_gitlab_access(gitlab_url: str, token: str | None, runner=subprocess
     return len([ln for ln in (result.stdout or "").splitlines() if ln.strip()])
 
 
-def clone_repo(clone_url: str, dest_dir: str, depth: int = 1, runner=subprocess.run) -> str:
+def clone_repo(clone_url: str, dest_dir: str, depth: int = 1, runner=subprocess.run,
+               env: dict | None = None) -> str:
     """Shallow-clone ``clone_url`` into ``dest_dir``. Never echoes the URL (may
     contain a token) on failure."""
     result = runner(
         ["git", "clone", "--depth", str(depth), clone_url, dest_dir],
         capture_output=True, text=True,
-        env={**os.environ, **GIT_PROTOCOL_ENV},
+        env=env or {**os.environ, **GIT_PROTOCOL_ENV},
     )
     if result.returncode != 0:
         # Scrub: report stderr but not the token-bearing URL/command.
@@ -282,7 +386,7 @@ def prepare_repo(
         if not gitlab_url:
             raise ValueError("gitlab source requires gitlab_url")
         clone_url = build_clone_url(gitlab_url, token or "")
-        clone_repo(clone_url, repo_dir)
+        clone_repo(clone_url, repo_dir, env=guarded_git_env(gitlab_url))
         try:
             scrub_origin_credentials(repo_dir, gitlab_url)
         except Exception as exc:

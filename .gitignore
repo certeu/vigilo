@@ -62,6 +62,8 @@ htmlcov/
 *.sqlite
 *.sqlite3
 data/
+# ...but the grey-box engine's bundled offline tables are source, not runtime data.
+!src/greybox_web/data/
 uploads/
 pgdata/
 postgres-data/
@@ -117,3 +119,12 @@ prompts/pipeline-testing/
 .windsurf/
 .aider*
 web/tsconfig.tsbuildinfo
+
+# Local notes and assistant files, not part of this repository.
+/AGENTS.md
+/CLAUDE.md
+/.claude/
+/docs/design/
+/docs/evaluation/
+/docs/backlog.md
+/tests/greybox_web/fixtures/*/README.md

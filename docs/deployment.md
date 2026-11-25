@@ -20,7 +20,7 @@ shared volume and writes the report and logs back.
 |-----------|-----------|------|
 | **UI** | React + Vite + TypeScript SPA (nginx) | The web app. Talks only to the API. |
 | **API** | FastAPI (`src/webapi/`) | Auth, repositories, jobs, runs, reports, dashboards, scheduling, email. Starts pipeline runs. |
-| **Worker** | Python orchestrator worker (built from the root `Dockerfile`) | Executes the white-box engine (and the grey-box workflow). |
+| **Worker** | Python orchestrator worker (built from the root `Dockerfile`) | Executes the white-box engine. Grey-box runs use the separate `greybox-worker` service (same image, `greybox` profile). |
 | **Orchestrator** | Orchestrator server (`start-dev`) | Orchestrates the long-running pipeline workflow and its activities. |
 | **Postgres** | PostgreSQL 16 | The platform's system of record (users, repos, jobs, runs, metrics). |
 | **MailHog** | Mail catcher | Dev SMTP sink for invitation + report emails. Internal-only; swap for a real relay in production. |
@@ -160,8 +160,7 @@ the UI's internal `/api` proxy.
 
 ## Docker Compose files, explained
 
-Vigilo has **two independent ways to run**, and each has its own compose files: the platform
-for white-box scans, and the command line for grey-box scans.
+Vigilo runs on the web platform; every compose file lives in `deploy/`.
 
 ### The platform (`deploy/`) — API + web UI, multi-user
 
@@ -171,25 +170,18 @@ for white-box scans, and the command line for grey-box scans.
 | `deploy/docker-compose.plain.yml` | *Override* for the full platform | Layer it on to run **without Traefik and without TLS**, publishing the UI on a host port. See [Option 3](#option-3--no-traefik-your-own-reverse-proxy-or-plain-http). |
 | `deploy/docker-compose.api.yml` | **API only** (Postgres + API, no UI) | Headless / external API consumers, or when you only need the API surface. |
 
-### Grey-box (repo root) — single-user, no web UI
+**Grey-box in the web platform (optional).** The platform can also run grey-box analyses from the UI
+(flag `VIGILO_GREYBOX_WEB_ENABLED`, off by default). Its executor is a separate process: start the
+`greybox-worker` service of the full or API compose file with `--profile greybox`
+(`docker compose --env-file .env --profile greybox -f deploy/docker-compose.full.yml up -d`), scale it with
+`--scale greybox-worker=N`, and keep `VIGILO_GREYBOX_ALLOW_PRIVATE_TARGETS=false` in production. Every setting is
+in [`deploy/config-reference.md`](../deploy/config-reference.md#grey-box-web-platform).
 
-Driven by `make` — no database, no accounts, no UI. See
-[Grey-box from the command line](../README.md#grey-box-from-the-command-line).
-
-| File | For | When to use |
-|------|-----|-------------|
-| `docker-compose.greybox.yml` | **Grey-box** — Orchestrator + SurrealDB + Surrealist + worker | Grey-box (no-source) scans via `make greybox`. |
-| `docker-compose.opencode.yml` | *Override* for grey-box | Layer onto `docker-compose.greybox.yml` to use the OpenCode executor. |
-| `docker-compose.codex.yml` | *Override* for grey-box | Layer onto `docker-compose.greybox.yml` to use the OpenAI Codex executor. |
-
-The three override files (`plain`, `opencode`, `codex`) are never used alone — they are layered
-onto a base file with a second `-f`, e.g.
-`docker compose -f docker-compose.greybox.yml -f docker-compose.codex.yml build worker`. The
-`make` targets wire this up for you.
+The `plain` override file is never used alone — it is layered onto a base file with a second
+`-f`, e.g. `docker compose -f deploy/docker-compose.full.yml -f deploy/docker-compose.plain.yml up`.
 
 > **Don't run two copies of the platform on one host.** `deploy/docker-compose.full.yml`
 > attaches to a fixed Docker network called `vigilo_net`, so a second copy started under a
 > different Compose project name joins the *same* network. Service names like `api` and
 > `postgres` then resolve to either stack at random, which produces baffling intermittent
-> failures. (The grey-box stack uses a separate network, `vigilo-net`, and doesn't collide with
-> the platform.)
+> failures.

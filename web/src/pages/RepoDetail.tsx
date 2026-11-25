@@ -6,6 +6,7 @@ import { SeverityDonut, TimelineChart, type TimelinePoint } from "../components/
 import { FileTree } from "../components/FileTree";
 import { RepoSettingsDrawer } from "../components/RepoSettingsDrawer";
 import { StatusDot } from "../components/StatusDot";
+import { statusLabel } from "../lib/status";
 import { SEVERITY_COLORS } from "../lib/severity";
 
 // Build a commit web URL. GitLab uses /-/commit/<sha>; gitea/forgejo/codeberg use
@@ -122,22 +123,22 @@ export function RepoDetail() {
       <section className="card mb-6 p-5">
         <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate">Findings over time</h2>
         <p className="mb-3 text-sm text-slate">
-          Each point is a completed scan — re-run after fixes to watch findings fall.
+          Each point is a completed analysis — re-run after fixes to watch findings fall.
         </p>
         <TimelineChart data={points} />
         {points.length === 1 && (
-          <p className="mt-2 text-xs text-slate">Run more scans to see a trend line.</p>
+          <p className="mt-2 text-xs text-slate">Run more analyses to see a trend line.</p>
         )}
       </section>
 
       <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <section className="card p-5">
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate">Latest scan — severity</h2>
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate">Latest analysis — severity</h2>
           {!latest ? (
-            <div className="flex h-40 items-center justify-center text-sm text-slate">No scans yet.</div>
+            <div className="flex h-40 items-center justify-center text-sm text-slate">No analyses yet.</div>
           ) : latestParseFailed ? (
             <div className="flex h-40 items-center justify-center px-4 text-center text-sm text-severity-critical">
-              Couldn't parse findings for the latest run. The scan completed but its
+              Couldn't parse findings for the latest run. The analysis completed but its
               findings output was missing or unreadable — numbers are not shown rather
               than displaying zeros.
             </div>
@@ -168,10 +169,10 @@ export function RepoDetail() {
                 {pkgs.length === 0 && (
                   <tr><td className="px-4 py-6 text-center text-slate" colSpan={4}>
                     {latest && scaScanned === false
-                      ? "Supply-chain analysis wasn't part of this scan (run the full preset to include it)."
+                      ? "Supply-chain analysis wasn't part of this analysis (run the full preset to include it)."
                       : latest
                         ? "No vulnerable dependencies found."
-                        : "No scans yet."}
+                        : "No analyses yet."}
                   </td></tr>
                 )}
               </tbody>
@@ -191,7 +192,7 @@ export function RepoDetail() {
                 <td className="px-4 py-2">
                   <Link to={`/runs/${r.id}`} className="flex items-center gap-2">
                     <StatusDot status={r.status} />
-                    <span className="text-slate">{r.status}</span>
+                    <span className="text-slate">{statusLabel(r.status)}</span>
                   </Link>
                 </td>
                 <td className="px-3 py-2 mono text-slate">{r.trigger_type}</td>
@@ -249,7 +250,7 @@ export function RepoDetail() {
           ) : (
             <div className="py-6 text-center text-sm text-slate">
               {repo.source_type === "gitlab"
-                ? "File structure becomes available after the first scan clones the repository."
+                ? "File structure becomes available after the first run clones the repository."
                 : "No files captured yet."}
             </div>
           )}

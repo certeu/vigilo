@@ -15,6 +15,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import tarfile
 import zipfile
 
 from src.webapi.settings import get_settings
@@ -32,8 +33,13 @@ def tree_cache_path(repo_id: str) -> str:
 
 
 def _skip(path: str) -> bool:
-    segs = path.split("/")
-    return any(s in _SKIP_DIRS for s in segs) or segs[-1] in _SKIP_FILES
+    segs = [s for s in path.split("/") if s]
+    if not segs:
+        return True
+    # "._name" are macOS AppleDouble sidecars (resource forks) that a Mac's tar adds
+    # next to every file; the zip equivalent lives under __MACOSX. Not source.
+    return any(s in _SKIP_DIRS for s in segs) or segs[-1] in _SKIP_FILES \
+        or segs[-1].startswith("._")
 
 
 def _lone_root_prefix(names: list[str]) -> str:
@@ -58,26 +64,35 @@ def _lone_root_prefix(names: list[str]) -> str:
 
 
 def capture_repo_tree(repo_id: str, source_path: str) -> int:
-    """Persist the file listing of ``source_path`` (a directory OR a .zip archive).
+    """Persist the file listing of ``source_path`` (a directory, or a .zip / .tar(.gz)
+    archive; the format is detected from the content, since uploads are stored as
+    ``<repo id>.zip`` whatever they are).
 
     Names only — the contents are never read. Returns the number of files captured.
     Best-effort caller: exceptions propagate so the caller can log + continue."""
+    from src.webapi.ingestion import archive_kind
     paths: list[str] = []
     truncated = False
-    if os.path.isfile(source_path) and source_path.endswith(".zip"):
-        with zipfile.ZipFile(source_path) as zf:
-            names = zf.namelist()
-            prefix = _lone_root_prefix(names)  # strip a Finder/tarball wrapper dir
-            for n in names:
-                if n.endswith("/") or _skip(n):
-                    continue
-                n = n.replace("\\", "/")
-                if prefix and n.startswith(prefix):
-                    n = n[len(prefix):]
-                paths.append(n)
-                if len(paths) >= _MAX_ENTRIES:
-                    truncated = True
-                    break
+    kind = archive_kind(source_path) if os.path.isfile(source_path) else None
+    if kind is not None:
+        if kind == "zip":
+            with zipfile.ZipFile(source_path) as zf:
+                names = zf.namelist()
+        else:
+            with tarfile.open(source_path) as tf:
+                names = [m.name + ("/" if m.isdir() else "") for m in tf.getmembers()
+                         if m.isfile() or m.isdir()]
+        prefix = _lone_root_prefix(names)  # strip a Finder/tarball wrapper dir
+        for n in names:
+            if n.endswith("/") or _skip(n):
+                continue
+            n = n.replace("\\", "/")
+            if prefix and n.startswith(prefix):
+                n = n[len(prefix):]
+            paths.append(n)
+            if len(paths) >= _MAX_ENTRIES:
+                truncated = True
+                break
     elif os.path.isdir(source_path):
         for root, dirs, files in os.walk(source_path):
             dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
@@ -119,11 +134,11 @@ def capture_gitlab_tree(repo_id: str, gitlab_url: str, token: str | None) -> int
     shallow clone (fetches tree objects only, not file contents) + ``git ls-tree``. This
     lets the file browser work before the first scan and after scan checkouts are cleaned,
     independent of the ephemeral scan workspace. Best-effort; raises on failure."""
-    from src.webapi.ingestion import GIT_PROTOCOL_ENV, build_clone_url
+    from src.webapi.ingestion import build_clone_url, guarded_git_env
 
     clone_url = build_clone_url(gitlab_url, token or "")
+    env = guarded_git_env(gitlab_url)   # SSRF guard + DNS pin (before any temp dir)
     tmp = tempfile.mkdtemp(prefix="vigilo-tree-")
-    env = {**os.environ, **GIT_PROTOCOL_ENV}
     try:
         clone = subprocess.run(
             ["git", "clone", "--filter=blob:none", "--no-checkout", "--depth", "1",

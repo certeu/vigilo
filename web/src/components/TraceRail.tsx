@@ -1,4 +1,4 @@
-// The signature element (spec §16.5). A vertical spine of pipeline phases:
+// The signature element. A vertical spine of pipeline phases:
 // completed nodes filled, the active node pulses in accent, pending nodes are
 // outlined, and a failed run marks the active node in the critical severity hue.
 //

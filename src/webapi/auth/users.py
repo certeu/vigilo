@@ -21,6 +21,18 @@ logger = logging.getLogger(__name__)
 MIN_PASSWORD_LENGTH = 10
 
 
+def _is_trivially_weak(password: str) -> bool:
+    """All one character (``aaaaaaaaaaaa``), or a purely sequential run of digits
+    (``1234567890``, ``9876543210``). Length/email rules are checked separately."""
+    if len(set(password)) == 1:
+        return True
+    if password.isdigit() and password.isascii():
+        diffs = [(int(b) - int(a)) % 10 for a, b in zip(password, password[1:])]
+        if all(d == 1 for d in diffs) or all(d == 9 for d in diffs):  # ascending / descending
+            return True
+    return False
+
+
 async def get_user_db(
     session: AsyncSession = Depends(get_async_session),
 ) -> AsyncGenerator[SQLAlchemyUserDatabase, None]:
@@ -45,6 +57,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         email = getattr(user, "email", "") or ""
         if email and email.lower() in password.lower():
             raise InvalidPasswordException("Password must not contain your email.")
+        if _is_trivially_weak(password):
+            raise InvalidPasswordException(
+                "Password is too easy to guess (repeated or sequential characters)."
+            )
 
     async def on_after_forgot_password(self, user: User, token: str, request=None) -> None:
         """Email a single-use, time-limited reset link (best-effort — never raise)."""

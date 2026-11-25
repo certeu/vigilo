@@ -30,3 +30,5 @@ services:
   ui:
     ports:
       - "${VIGILO_HTTP_PORT:-8080}:80"
+    volumes:
+      - ./nginx-realip-none.conf:/etc/nginx/vigilo-realip.conf:ro   # nothing in front of nginx

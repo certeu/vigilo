@@ -63,6 +63,23 @@ def get_jwt_strategy() -> EpochJWTStrategy:
     return EpochJWTStrategy(secret=s.jwt_secret, lifetime_seconds=s.jwt_lifetime_seconds)
 
 
+async def authenticate_bearer(token: str | None, session):
+    """Re-validate a bearer token against the DB exactly as a normal request does
+    (signature, ``exp``, user exists, ``session_epoch`` unchanged) plus ``is_active``.
+    Used by long-lived responses (SSE) that must not outlive a revoked/expired token.
+    Returns the user or None."""
+    from fastapi_users.db import SQLAlchemyUserDatabase
+
+    from src.webapi.auth.users import UserManager
+    from src.webapi.models import User
+
+    manager = UserManager(SQLAlchemyUserDatabase(session, User))
+    user = await get_jwt_strategy().read_token(token, manager)
+    if user is None or not user.is_active:
+        return None
+    return user
+
+
 auth_backend = AuthenticationBackend(
     name="jwt",
     transport=bearer_transport,
