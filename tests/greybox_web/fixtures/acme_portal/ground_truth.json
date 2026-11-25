@@ -1,0 +1,70 @@
+{
+  "target": "Acme Workspace (tests/greybox_web/fixtures/acme_portal)",
+  "accounts": [
+    {"label": "alice", "user": "alice", "password": "Alice-Pw-2024!", "role": "member"},
+    {"label": "bob", "user": "bob", "password": "Bob-Pw-2024!", "role": "manager"}
+  ],
+  "login": {"path": "/api/auth/login", "user_field": "username",
+            "password_field": "password", "body": "json or form"},
+  "seeded": [
+    {
+      "id": "GT1",
+      "title": "Object-level authorisation missing on invoices",
+      "expected": "Confirmed vulnerability",
+      "class": "vulnerability",
+      "where": "GET /api/invoices/{id}",
+      "evidence": "As alice, GET /api/invoices/1043 (owner bob) returns 200 with bob's invoice; the response echoes requested_by.",
+      "discovery": "Invoices list (#/invoices) shows alice's ids 1041-1042; sibling ids 1043-1044 belong to bob.",
+      "match": {"location_regex": "/api/invoices/[0-9]+", "text_regex": "(?i)own|authori|idor|bola|access|readable"},
+      "must_be_verified": true
+    },
+    {
+      "id": "GT2",
+      "title": "Internal service metadata disclosed by the public health endpoint",
+      "expected": "Confirmed information disclosure (informational / hardening / misconfiguration)",
+      "class": "any",
+      "where": "GET /api/health (no authentication)",
+      "evidence": "Response contains internal host names (app-int-07.acme.internal, db-int-02.acme.internal), commit and build ids.",
+      "discovery": "Not referenced by the UI: found by probing common API paths, static analysis or crawl.",
+      "match": {"location_regex": "/api/health", "text_regex": "(?i)disclos|internal|metadata|leak|host|version|banner"},
+      "must_be_verified": false
+    },
+    {
+      "id": "GT3",
+      "title": "CORS reflects arbitrary origins with credentials",
+      "expected": "Security misconfiguration",
+      "class": "misconfiguration",
+      "where": "/api/* responses",
+      "evidence": "A request with Origin: https://evil.example receives Access-Control-Allow-Origin: https://evil.example and Access-Control-Allow-Credentials: true.",
+      "match": {"location_regex": "/api/", "text_regex": "(?i)cors|origin"},
+      "must_be_verified": false
+    },
+    {
+      "id": "GT4",
+      "title": "Missing defensive headers (CSP, X-Content-Type-Options, Referrer-Policy)",
+      "expected": "Hardening recommendation",
+      "class": "hardening",
+      "where": "HTML and API responses",
+      "evidence": "No Content-Security-Policy (incl. frame-ancestors) / X-Frame-Options / X-Content-Type-Options / Referrer-Policy header; X-Powered-By: Express disclosed.",
+      "match": {"location_regex": ".", "text_regex": "(?i)content-security-policy|x-content-type-options|referrer-policy|x-powered-by|x-frame-options|frame-ancestors"},
+      "must_be_verified": false
+    },
+    {
+      "id": "GT5",
+      "title": "Activity feed leaks other users' document ids; documents lack ownership checks",
+      "expected": "Confirmed vulnerability (workflow + correlation)",
+      "class": "vulnerability",
+      "where": "GET /api/activity (text/x-acme-feed) + GET /api/documents/{uuid}",
+      "evidence": "As alice, the feed lists bob's doc:e5d4c3b2-... ('Board salary review 2025'); GET /api/documents/e5d4c3b2-a190-4f8e-8d7c-6b5a4f3e2d13 as alice returns 200 with owner bob.",
+      "discovery": "Sign in, open the dashboard (it fetches the feed but only renders the user's own lines), parse the custom feed, correlate doc: references with the documents API.",
+      "match": {"location_regex": "/api/(documents|activity)", "text_regex": "(?i)own|authori|idor|access|feed|activity|other user|leak|readable"},
+      "must_be_verified": true
+    }
+  ],
+  "negative_controls": [
+    {"id": "NC1", "where": "GET /api/admin/users", "truth": "role enforced: alice (member) gets 403",
+     "false_positive_if": {"location_regex": "/api/admin/users", "text_regex": "(?i)authori[sz]ation|readable by|idor|privilege|role"}},
+    {"id": "NC2", "where": "GET /api/me, GET /api/documents (list)", "truth": "caller's own data only",
+     "false_positive_if": {"location_regex": "/api/(me|documents)$", "text_regex": "(?i)authori|readable by|idor"}}
+  ]
+}

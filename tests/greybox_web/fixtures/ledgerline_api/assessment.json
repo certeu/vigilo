@@ -1,0 +1,12 @@
+{
+  "name": "Ledgerline",
+  "mode": "web",
+  "port": 18642,
+  "objective": "Assess the Ledgerline billing API for security weaknesses, using the provided test accounts. Ledgerline is an API-first, multi-tenant invoicing service with no browser interface; clients authenticate with bearer tokens.",
+  "accounts": [
+    {"label": "nadia", "user": "nadia", "password": "Nadia-Ledger-7731!x"},
+    {"label": "omar", "user": "omar", "password": "Omar-View-4096#q"},
+    {"label": "greta", "user": "greta", "password": "Greta-Books-2210$k"}
+  ],
+  "health_path": "/"
+}

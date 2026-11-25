@@ -3,6 +3,14 @@ from __future__ import annotations
 import sqlalchemy as sa
 
 
+def _migration_head(cfg):
+    from alembic.script import ScriptDirectory
+
+    heads = ScriptDirectory.from_config(cfg).get_heads()
+    assert len(heads) == 1, f"expected a linear migration history, found {heads}"
+    return heads[0]
+
+
 def _url(tmp_path):
     return f"sqlite:///{tmp_path}/mig.db"
 
@@ -25,7 +33,7 @@ class TestMigrations:
         assert "archived" in cols
         with eng.connect() as c:
             ver = c.execute(sa.text("SELECT version_num FROM alembic_version")).scalar()
-        assert ver == "0008_run_secrets_job_cookie"
+        assert ver == _migration_head(cfg)
 
     def test_upgrade_is_idempotent(self, tmp_path):
         from scripts.run_migrations import build_config
@@ -117,3 +125,71 @@ class TestRunSecretsMigration:
         insp = sa.inspect(sa.create_engine(url))
         assert "run_secrets" in insp.get_table_names()
         assert "target_credential_id" in {c["name"] for c in insp.get_columns("jobs")}
+
+
+class TestGreyboxWebMigration:
+    """0009_greybox_web: all grey-box tables, reversible, matching the ORM models."""
+
+    def _greybox_tables(self, url):
+        return {t for t in sa.inspect(sa.create_engine(url)).get_table_names()
+                if t.startswith("greybox_")
+                and t != "greybox_egress_proxies"}   # 0016, outside GREYBOX_TABLES
+
+    def test_0009_upgrade_downgrade_upgrade(self, tmp_path):
+        from scripts.run_migrations import build_config
+        from alembic import command
+        from src.greybox_web.models import GREYBOX_TABLES
+
+        url = _url(tmp_path)
+        cfg = build_config(url)
+        command.upgrade(cfg, "head")
+        assert self._greybox_tables(url) == set(GREYBOX_TABLES)
+
+        command.downgrade(cfg, "0008_run_secrets_job_cookie")
+        assert self._greybox_tables(url) == set()
+        insp = sa.inspect(sa.create_engine(url))
+        # white-box tables untouched by the downgrade
+        assert {"users", "repositories", "jobs", "runs", "run_secrets",
+                "credentials"} <= set(insp.get_table_names())
+
+        command.upgrade(cfg, "head")   # created by 0009 itself this time (not 0003)
+        assert self._greybox_tables(url) == set(GREYBOX_TABLES)
+        with sa.create_engine(url).connect() as c:
+            ver = c.execute(sa.text("SELECT version_num FROM alembic_version")).scalar()
+        assert ver == "0025_greybox_correlation"
+
+    def test_0009_schema_matches_models(self, tmp_path):
+        """The hand-written migration and the ORM models must not drift."""
+        from scripts.run_migrations import build_config
+        from alembic import command
+        from src.webapi.db import Base
+        import src.webapi.models  # noqa: F401
+        from src.greybox_web.models import GREYBOX_TABLES
+
+        url = _url(tmp_path)
+        cfg = build_config(url)
+        command.upgrade(cfg, "0008_run_secrets_job_cookie")
+        eng = sa.create_engine(url)
+        with eng.begin() as c:   # make sure 0009 (not 0003) creates the tables
+            for t in reversed(GREYBOX_TABLES):
+                c.execute(sa.text(f"DROP TABLE IF EXISTS {t}"))
+        command.upgrade(cfg, "head")
+        insp = sa.inspect(sa.create_engine(url))
+        for name in GREYBOX_TABLES:
+            model = Base.metadata.tables[name]
+            cols = {c["name"]: c for c in insp.get_columns(name)}
+            assert set(cols) == {c.name for c in model.columns}, name
+            for col in model.columns:
+                assert bool(cols[col.name]["nullable"]) == bool(col.nullable), (name, col.name)
+            uniques = {tuple(u["column_names"]) for u in insp.get_unique_constraints(name)}
+            want_uniques = {tuple(c.name for c in u.columns) for u in model.constraints
+                            if isinstance(u, sa.UniqueConstraint)}
+            assert uniques == want_uniques, name
+            idx = {tuple(i["column_names"]) for i in insp.get_indexes(name)}
+            want_idx = {tuple(c.name for c in i.columns) for i in model.indexes}
+            assert idx == want_idx, name
+            fks = {(tuple(f["constrained_columns"]), f["referred_table"])
+                   for f in insp.get_foreign_keys(name)}
+            want_fks = {((fk.parent.name,), fk.column.table.name)
+                        for fk in model.foreign_keys}
+            assert fks == want_fks, name

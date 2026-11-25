@@ -27,12 +27,12 @@ export function Dashboard() {
 
       {empty ? (
         <div className="card p-10 text-center text-slate">
-          No completed scans yet. Run a job to populate the dashboard.
+          No completed analyses yet. Run a job to populate the dashboard.
         </div>
       ) : (
         <>
           <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-            <Kpi label="Repositories scanned" value={m.repositories_scanned} />
+            <Kpi label="Repositories analysed" value={m.repositories_scanned} />
             <Kpi label="Total findings" value={m.total_findings} />
             <Kpi label="Exploited" value={m.exploited} tone={SEVERITY_COLORS.critical} />
             <Kpi label="Supply chain" value={m.supply_chain} />

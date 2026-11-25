@@ -1,0 +1,11 @@
+{
+  "name": "Acme Workspace",
+  "mode": "web",
+  "port": 18640,
+  "health_path": "/api/health",
+  "objective": "Assess the Acme Workspace web application (projects, invoices, documents) for security weaknesses, using the provided test accounts.",
+  "accounts": [
+    {"label": "alice", "user": "alice", "password": "Alice-Pw-2024!"},
+    {"label": "bob", "user": "bob", "password": "Bob-Pw-2024!"}
+  ]
+}

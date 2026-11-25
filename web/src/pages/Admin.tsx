@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { api, type AdminConfig, type Invitation, type User } from "../api/client";
 import { ModelsExecutorSection } from "../components/ModelsExecutorSection";
 import { InfoTip } from "../components/InfoTip";
+import { EgressProxiesSection } from "../features/admin/EgressProxiesSection";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 
 export function Admin() {
@@ -219,6 +220,8 @@ export function Admin() {
       )}
 
       {cfg && <ModelsExecutorSection cfg={cfg} onSaved={setCfg} />}
+
+      <EgressProxiesSection />
 
       {cfg && (
         <section>

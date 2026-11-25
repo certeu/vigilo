@@ -1,0 +1,36 @@
+{
+  "name": "Harbor Net",
+  "mode": "network",
+  "objective": "Assess the services exposed on this internal network segment. Build an inventory of the reachable hosts and services, identify each service and its version where possible, and report authentication, encryption and configuration weaknesses with evidence. Correctly configured services should be recorded as such, not reported as weaknesses. Stay strictly within the authorised addresses and ports; do not attempt denial of service, brute force or destructive actions.",
+  "network": {
+    "targets": [
+      "127.0.0.11",
+      "127.0.0.12",
+      "127.0.0.13",
+      "127.0.0.14"
+    ],
+    "ports": [
+      2222,
+      8443,
+      8080,
+      9100,
+      2525,
+      6379,
+      11211,
+      5432,
+      2121,
+      2122,
+      21,
+      23,
+      80,
+      443,
+      3306
+    ],
+    "protocols": [
+      "tcp",
+      "http",
+      "dns"
+    ]
+  },
+  "anchor_url": "http://127.0.0.12:9100/"
+}

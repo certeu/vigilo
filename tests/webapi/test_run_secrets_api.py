@@ -214,7 +214,7 @@ class TestInternalEndpoint:
         assert (await _post(internal, rid, "short")).status_code == 422
         assert (await _post(internal, rid, "x" * 40, ["bogus"])).status_code == 422
 
-    def test_not_reachable_through_the_public_app_or_proxy(self):
+    def test_not_reachable_through_the_public_app_or_proxy(self, _env):
         from src.webapi.app import create_app
 
         public = create_app(run_lifespan=False)

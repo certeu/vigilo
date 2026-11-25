@@ -182,7 +182,7 @@ export function RepoSettingsDrawer({
 
         <section className="mb-6">
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate">
-            Custom scan instructions
+            Custom analysis instructions
           </h3>
           {SCAN_FIELDS.map((f) => (
             <div key={f.key} className="mb-3">
