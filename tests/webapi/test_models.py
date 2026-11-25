@@ -33,7 +33,7 @@ class TestModels:
     async def test_credential_stores_bytes(self, session):
         owner = uuid.uuid4()
         c = Credential(id=uuid.uuid4(), owner_id=owner, kind="gitlab_token",
-                       label="tok", secret_enc=b"\x00\x01", gitlab_base_url="https://gl")
+                       label="tok", secret_enc=b"\x00\x01", forge_base_url="https://gl")
         session.add(c)
         await session.commit()
         assert c.secret_enc == b"\x00\x01"

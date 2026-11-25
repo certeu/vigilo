@@ -3,8 +3,8 @@
 Two sources:
 - **upload** — extract a user-provided archive (zip / tar.gz), with path-traversal
   guards (uploads are semi-trusted but we never trust archive member names).
-- **gitlab** — shallow ``git clone`` over HTTPS with the owner's token injected into
-  the URL. The token is NEVER left on disk or in logs (``origin`` is reset to the clean URL): the ``.vigilo-remote-url``
+- **a forge** (GitLab, GitHub; see ``src.services.forges``) — shallow ``git clone``
+  over HTTPS with the owner's token injected into the URL (as the forge's user name). The token is NEVER left on disk or in logs (``origin`` is reset to the clean URL): the ``.vigilo-remote-url``
   marker records the CLEAN url (no credentials), and clone errors are scrubbed.
 """
 from __future__ import annotations
@@ -167,7 +167,7 @@ def validate_upload(upload_path: str) -> int:
 
 
 # Only real network git transports are allowed — never file://, ext::, ssh://, etc.
-# Without this an authenticated user could set gitlab_url to file:///... (clone a
+# Without this an authenticated user could set remote_url to file:///... (clone a
 # local repo and exfiltrate it via the report/tree) or http://<internal-host> (SSRF).
 _ALLOWED_GIT_SCHEMES = ("https", "http")
 # git-level transport allowlist enforced on every git subprocess (defense-in-depth,
@@ -239,7 +239,7 @@ def resolve_git_host(gitlab_url: str, settings=None) -> tuple[str, int, list[str
         if reason:
             raise ValueError(
                 f"repository host {host!r} is not allowed ({reason}); ask an admin to "
-                "add it to VIGILO_GITLAB_ALLOWED_HOSTS if it is your GitLab"
+                "add it to VIGILO_GITLAB_ALLOWED_HOSTS if it is your GitLab or GitHub Enterprise"
             )
     return host, port, ips
 
@@ -264,8 +264,8 @@ def parse_ip_literal(host: str):
     return parse_ip(host)
 
 
-def _require_web_scheme(gitlab_url: str) -> str:
-    scheme = (urlparse(gitlab_url).scheme or "https").lower()
+def _require_web_scheme(remote_url: str) -> str:
+    scheme = (urlparse(remote_url).scheme or "https").lower()
     if scheme not in _ALLOWED_GIT_SCHEMES:
         raise ValueError(f"unsupported git URL scheme {scheme!r}; only https/http allowed")
     return scheme
@@ -279,33 +279,35 @@ def reject_embedded_credentials(url: str) -> None:
     if p.username is not None or p.password is not None or "@" in (p.netloc or ""):
         raise ValueError(
             "the repository URL must not contain credentials (user:password@); "
-            "attach a GitLab token as a credential instead"
+            "attach a token as a credential instead"
         )
 
 
-def build_clone_url(gitlab_url: str, token: str) -> str:
-    """Return an HTTP(S) clone URL with the token injected as oauth2 basic auth.
-    Rejects non-web schemes (file://, ext::, ssh://, …) and URLs with embedded
-    credentials."""
-    scheme = _require_web_scheme(gitlab_url)
+def build_clone_url(remote_url: str, token: str, username: str = "oauth2") -> str:
+    """Return an HTTP(S) clone URL with the token injected as basic auth
+    (``<username>:<token>``; the user name depends on the forge: ``oauth2`` for
+    GitLab, ``x-access-token`` for GitHub). Rejects non-web schemes (file://, ext::,
+    ssh://, …) and URLs with embedded credentials."""
+    scheme = _require_web_scheme(remote_url)
     if token and scheme != "https":
         # A token sent over cleartext http can be sniffed or redirected: https only.
         raise ValueError("a repository URL that carries a token must use https://")
-    reject_embedded_credentials(gitlab_url)
-    p = urlparse(gitlab_url)
+    reject_embedded_credentials(remote_url)
+    p = urlparse(remote_url)
     host = p.hostname or ""
-    netloc = f"oauth2:{token}@{host}"
+    netloc = f"{username}:{token}@{host}"
     if p.port:
         netloc += f":{p.port}"
     return urlunparse((scheme, netloc, p.path, "", "", ""))
 
 
-def validate_gitlab_access(gitlab_url: str, token: str | None, runner=subprocess.run) -> int:
-    """Verify a GitLab repo is reachable + the token grants access, WITHOUT a full
-    clone, via ``git ls-remote``. Returns the number of refs. Raises RuntimeError on
-    failure (token scrubbed from the message)."""
-    clone_url = build_clone_url(gitlab_url, token or "")
-    env = guarded_git_env(gitlab_url)   # SSRF guard + DNS pin (raises ValueError)
+def validate_remote_access(remote_url: str, token: str | None, runner=subprocess.run,
+                           username: str = "oauth2") -> int:
+    """Verify a forge repository is reachable + the token grants access, WITHOUT a
+    full clone, via ``git ls-remote``. Returns the number of refs. Raises RuntimeError
+    on failure (token scrubbed from the message)."""
+    clone_url = build_clone_url(remote_url, token or "", username)
+    env = guarded_git_env(remote_url)   # SSRF guard + DNS pin (raises ValueError)
     result = runner(
         ["git", "ls-remote", "--heads", clone_url],
         capture_output=True, text=True, timeout=45, env=env,
@@ -369,10 +371,13 @@ def prepare_repo(
     source_type: str,
     repo_dir: str,
     upload_path: str | None = None,
-    gitlab_url: str | None = None,
+    remote_url: str | None = None,
     token: str | None = None,
+    username: str | None = None,
 ) -> str:
-    """Populate ``repo_dir`` from the given source. Returns the repo dir."""
+    """Populate ``repo_dir`` from the given source. Returns the repo dir.
+
+    For a forge source, ``username`` defaults to the forge's clone user name."""
     os.makedirs(repo_dir, exist_ok=True)
     if source_type == "upload":
         # upload_path may be an archive file OR a directory (uncompressed upload).
@@ -382,24 +387,26 @@ def prepare_repo(
             copy_tree(upload_path, repo_dir)
         else:
             extract_archive(upload_path, repo_dir)
-    elif source_type == "gitlab":
-        if not gitlab_url:
-            raise ValueError("gitlab source requires gitlab_url")
-        clone_url = build_clone_url(gitlab_url, token or "")
-        clone_repo(clone_url, repo_dir, env=guarded_git_env(gitlab_url))
-        try:
-            scrub_origin_credentials(repo_dir, gitlab_url)
-        except Exception as exc:
-            # The checkout may still carry the token in .git/config: delete it and fail.
-            for entry in os.listdir(repo_dir):
-                full = os.path.join(repo_dir, entry)
-                if os.path.islink(full) or not os.path.isdir(full):
-                    os.unlink(full)
-                else:
-                    shutil.rmtree(full, ignore_errors=True)
-            raise RuntimeError("could not scrub credentials from the checkout; ingestion aborted") from exc
-        write_remote_marker(repo_dir, gitlab_url)  # clean url, never the token
-        ensure_vigilo_excludes(repo_dir)
-    else:
+        return repo_dir
+    from src.services.forges import get_forge
+    forge = get_forge(source_type)
+    if forge is None:
         raise ValueError(f"unknown source_type: {source_type!r}")
+    if not remote_url:
+        raise ValueError(f"{source_type} source requires remote_url")
+    clone_url = build_clone_url(remote_url, token or "", username or forge.clone_username)
+    clone_repo(clone_url, repo_dir, env=guarded_git_env(remote_url))
+    try:
+        scrub_origin_credentials(repo_dir, remote_url)
+    except Exception as exc:
+        # The checkout may still carry the token in .git/config: delete it and fail.
+        for entry in os.listdir(repo_dir):
+            full = os.path.join(repo_dir, entry)
+            if os.path.islink(full) or not os.path.isdir(full):
+                os.unlink(full)
+            else:
+                shutil.rmtree(full, ignore_errors=True)
+        raise RuntimeError("could not scrub credentials from the checkout; ingestion aborted") from exc
+    write_remote_marker(repo_dir, remote_url)  # clean url, never the token
+    ensure_vigilo_excludes(repo_dir)
     return repo_dir

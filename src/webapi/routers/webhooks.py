@@ -47,7 +47,8 @@ async def gitlab_webhook(
     # Match the repository by project id, then verify the secret (constant-time).
     repo = (
         await session.scalars(
-            select(Repository).where(Repository.gitlab_project_id == project_id)
+            select(Repository).where(Repository.source_type == "gitlab",
+                                     Repository.forge_project_id == project_id)
         )
     ).first()
     if repo is None or not repo.webhook_secret:

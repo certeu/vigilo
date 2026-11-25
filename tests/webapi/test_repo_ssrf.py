@@ -90,7 +90,7 @@ def test_validate_access_never_runs_git_for_denied_host():
     called = []
     runner = lambda *a, **k: called.append(1) or types.SimpleNamespace(returncode=0, stdout="", stderr="")
     with pytest.raises(ValueError):
-        ingestion.validate_gitlab_access("http://169.254.169.254/x.git", None, runner)
+        ingestion.validate_remote_access("http://169.254.169.254/x.git", None, runner)
     assert called == []
 
 
@@ -101,5 +101,66 @@ def test_validate_access_passes_pinned_env_to_git(monkeypatch):
     def runner(cmd, capture_output, text, timeout, env):
         seen.update(env)
         return types.SimpleNamespace(returncode=0, stdout="a\trefs/heads/m\n", stderr="")
-    assert ingestion.validate_gitlab_access("https://gl.example/x.git", None, runner) == 1
+    assert ingestion.validate_remote_access("https://gl.example/x.git", None, runner) == 1
     assert seen["GIT_CONFIG_COUNT"] == "2"
+
+
+
+@pytest.mark.parametrize("ip", ["169.254.169.254", "10.0.0.7"])
+def test_github_app_api_host_is_vetted(monkeypatch, ip):
+    """A GitHub App calls the host's REST API before git runs: same host policy."""
+    from src.services.forges import github_app
+
+    monkeypatch.setattr(ingestion, "_getaddrinfo", _dns({"ghe.evil": [ip]}))
+    with pytest.raises(github_app.GitHubAppError, match="not allowed"):
+        github_app.pinned_opener("https://ghe.evil/api/v3", ingestion.resolve_git_host)
+
+
+def test_github_forge_mints_with_the_git_host_policy(monkeypatch):
+    from src.services.forges import get_forge
+    from src.services.forges import github_app
+
+    seen = {}
+    monkeypatch.setattr(github_app, "installation_token",
+                        lambda secret, url, **kw: seen.update(kw) or "t")
+    assert get_forge("github").access_token("github_app", "{}", "https://ghe.example/a/b") == "t"
+    assert seen["resolve"] is ingestion.resolve_git_host
+
+
+def test_github_app_requests_go_to_the_vetted_address(monkeypatch):
+    """No second DNS lookup (rebinding) and no proxy from the environment; TLS still
+    checks the host name."""
+    from src.services.forges import github_app
+
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid:3128")
+    monkeypatch.setattr(ingestion, "_getaddrinfo", _dns({"ghe.example": ["93.184.216.34"]}))
+    opener = github_app.pinned_opener("https://ghe.example/api/v3", ingestion.resolve_git_host)
+    assert not any(isinstance(h, __import__("urllib.request").request.ProxyHandler)
+                   and h.proxies for h in opener.handlers)
+
+    connected, wrapped = [], []
+
+    class _Ctx:
+        def wrap_socket(self, sock, server_hostname):
+            wrapped.append(server_hostname)
+            raise OSError("stop here")
+
+    def fake_connect(addr, *a, **k):
+        connected.append(addr)
+        return object()
+
+    monkeypatch.setattr(github_app.socket, "create_connection", fake_connect)
+    conn = github_app._PinnedHTTPSConnection("ghe.example", 443, pinned_ip="93.184.216.34",
+                                             context=_Ctx())
+    with pytest.raises(OSError):
+        conn.connect()
+    assert connected == [("93.184.216.34", 443)] and wrapped == ["ghe.example"]
+
+
+def test_github_app_opener_refuses_other_hosts(monkeypatch):
+    from src.services.forges import github_app
+
+    monkeypatch.setattr(ingestion, "_getaddrinfo", _dns({"ghe.example": ["93.184.216.34"]}))
+    opener = github_app.pinned_opener("https://ghe.example/api/v3", ingestion.resolve_git_host)
+    with pytest.raises(Exception, match="not vetted"):
+        opener.open("https://other.example/api/v3/app", timeout=1)

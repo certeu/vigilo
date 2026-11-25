@@ -93,7 +93,7 @@ fix works.*
 
 ![White-box: survey, plan, investigate, prove, review, patch, report](docs/images/whitebox-flow.png)
 
-Give Vigilo a repository (upload or GitLab) and, ideally, a running copy. The
+Give Vigilo a repository (upload, GitLab or GitHub) and, ideally, a running copy. The
 pipeline runs these stages:
 
 1. **Survey** the code, dependencies and live app.

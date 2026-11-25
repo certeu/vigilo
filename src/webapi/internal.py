@@ -22,7 +22,9 @@ router = APIRouter(prefix="/internal/v1", tags=["internal"])
 
 class RedeemRequest(BaseModel):
     key: str = Field(min_length=16, max_length=256)
-    want: list[Literal["gitlab_token", "cookie_header"]] = Field(min_length=1, max_length=2)
+    # gitlab_token: earlier name of forge_token, still accepted
+    want: list[Literal["forge_token", "gitlab_token", "cookie_header"]] = Field(
+        min_length=1, max_length=2)
 
 
 class RedeemResponse(BaseModel):

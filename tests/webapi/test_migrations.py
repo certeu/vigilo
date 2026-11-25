@@ -156,7 +156,7 @@ class TestGreyboxWebMigration:
         assert self._greybox_tables(url) == set(GREYBOX_TABLES)
         with sa.create_engine(url).connect() as c:
             ver = c.execute(sa.text("SELECT version_num FROM alembic_version")).scalar()
-        assert ver == "0025_greybox_correlation"
+        assert ver == _migration_head(cfg)
 
     def test_0009_schema_matches_models(self, tmp_path):
         """The hand-written migration and the ORM models must not drift."""

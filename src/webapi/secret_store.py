@@ -1,6 +1,6 @@
 """Per-run secret records: issue, redeem just in time, revoke.
 
-A run that needs a secret (the owner's GitLab token to push patches, a cookie header
+A run that needs a secret (the owner's forge token to push patches, a cookie header
 for authenticated testing) gets ONE record here, encrypted with the platform's Fernet
 key and keyed by a random *redemption key*. Only a reference (run id + key) goes into
 the workflow input; the worker redeems it over the internal listener
@@ -33,7 +33,10 @@ from src.webapi.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
-SECRET_KINDS = ("gitlab_token", "cookie_header")
+SECRET_KINDS = ("forge_token", "cookie_header")
+# Earlier name of a kind -> its current name. Records issued before the rename (and
+# callers that still ask for the old name) keep working.
+LEGACY_KINDS = {"gitlab_token": "forge_token"}
 
 
 class RedemptionRefused(Exception):
@@ -55,6 +58,7 @@ def _utc(dt: datetime) -> datetime:
 async def issue(session: AsyncSession, run_id: uuid.UUID, bundle: dict[str, str]) -> str:
     """Store ``bundle`` (kind -> value) for the run; return the redemption key.
     Replaces any earlier record of the run."""
+    bundle = {LEGACY_KINDS.get(k, k): v for k, v in bundle.items()}
     bundle = {k: v for k, v in bundle.items() if k in SECRET_KINDS and v}
     if not bundle:
         raise ValueError("nothing to store")
@@ -180,7 +184,8 @@ async def redeem(
                        run_id, client)
         raise RedemptionRefused("refused")
     bundle = json.loads(build_vault(get_settings()).decrypt(rec.secret_enc))
-    out = {k: bundle[k] for k in want if k in bundle}
+    bundle = {LEGACY_KINDS.get(k, k): v for k, v in bundle.items()}
+    out = {k: bundle[LEGACY_KINDS.get(k, k)] for k in want if LEGACY_KINDS.get(k, k) in bundle}
     if not out:
         raise RedemptionRefused("refused")
     rec.redeem_count += 1
