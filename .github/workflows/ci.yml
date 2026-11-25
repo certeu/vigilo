@@ -1,0 +1,128 @@
+# Continuous integration: backend tests, frontend build + unit tests, grey-box E2E.
+# Pull requests and pushes run the fast suites only (a few minutes). The slow
+# end-to-end tests (pytest marker `slow`) and the Playwright E2E run on demand:
+# Actions -> CI -> "Run workflow". Locally a plain `pytest tests` runs everything.
+# GitHub Actions. Read-only token; nothing is published or deployed from here.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:      # manual: also runs the slow tests and the E2E suite
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Python 3.13 matches deploy/Dockerfile.api; pyproject.toml requires >=3.11.
+  PYTHON_VERSION: "3.13"
+  # Node 20 matches web/Dockerfile (web/package.json declares no engines).
+  NODE_VERSION: "20"
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      # --timeout turns a hang into a failure instead of a stuck job.
+      - name: Run tests (fast suite)
+        run: >-
+          uv run --frozen --all-extras --with pytest --with pytest-asyncio --with pytest-timeout
+          pytest tests -q -m "not slow" --timeout=300 --durations=15
+
+  backend-slow:
+    name: Backend tests (slow, end-to-end)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Run tests (slow suite)
+        run: >-
+          uv run --frozen --all-extras --with pytest --with pytest-asyncio --with pytest-timeout
+          pytest tests -q -m slow --timeout=600 --durations=15
+
+  frontend:
+    name: Frontend build and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Type-check and build
+        run: npm run build
+      - name: Unit tests
+        run: npm test
+
+  e2e-greybox:
+    name: Grey-box E2E (Playwright)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      # The suite's launcher (web/e2e/greybox/serve.sh) uses the repo .venv.
+      - name: Install backend dependencies into .venv
+        run: uv sync --frozen --all-extras
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+      # Always run: it is a no-op for the browser when cached and installs the OS libraries
+      # (--with-deps), which are not part of the cache. E2E_CHROMIUM is deliberately NOT set:
+      # playwright.greybox.config.ts then uses the Chromium installed here.
+      - name: Install Playwright Chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+      - name: Run grey-box E2E
+        working-directory: web
+        run: npm run test:e2e:greybox
+      - name: Upload Playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-greybox
+          path: |
+            web/playwright-report/greybox
+            web/test-results/greybox
+          retention-days: 7

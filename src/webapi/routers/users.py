@@ -5,7 +5,7 @@ import asyncio
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi_users import InvalidPasswordException
 from fastapi_users.exceptions import UserAlreadyExists
 from fastapi_users.jwt import generate_jwt
@@ -30,6 +30,7 @@ from src.webapi.schemas import (
 from src.webapi.settings import get_settings
 
 router = APIRouter(tags=["users"])
+logout_router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
@@ -40,6 +41,19 @@ async def _other_active_admins(session: AsyncSession, exclude_id: uuid.UUID) -> 
             User.role == ROLE_ADMIN, User.is_active.is_(True), User.id != exclude_id
         )
     )
+
+
+@logout_router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+    user: User = Depends(current_active_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> Response:
+    """Revoke the caller's tokens: JWTs are stateless, so logout bumps ``session_epoch``
+    (the claim every request is checked against). This signs the user out of ALL their
+    sessions/devices, the same as a password change."""
+    user.session_epoch = (user.session_epoch or 0) + 1
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/users/me", response_model=UserRead)
@@ -87,6 +101,8 @@ async def create_user(
 ) -> User:
     try:
         return await manager.create(payload, safe=False)
+    except InvalidPasswordException as exc:
+        raise HTTPException(status_code=400, detail=exc.reason)
     except UserAlreadyExists:
         raise HTTPException(status_code=409, detail="Email already registered")
 
@@ -124,6 +140,9 @@ async def patch_user(
     if data.get("role") is not None:
         target.role = data["role"]
     if data.get("is_active") is not None:
+        if target.is_active and not data["is_active"]:
+            # Deactivation must also kill tokens already issued to the user.
+            target.session_epoch = (target.session_epoch or 0) + 1
         target.is_active = data["is_active"]
     await session.commit()
     await session.refresh(target)
@@ -154,6 +173,19 @@ async def delete_user(
             status_code=409,
             detail="User owns repositories; deactivate the user instead "
                    "(or delete/reassign their repositories first).",
+        )
+    # Same keep-data rule for grey-box targets and runs.
+    from src.greybox_web.models import GreyboxRun, GreyboxTarget
+    owns_greybox = await session.scalar(
+        select(func.count()).select_from(GreyboxTarget).where(GreyboxTarget.owner_id == target.id)
+    ) or await session.scalar(
+        select(func.count()).select_from(GreyboxRun).where(GreyboxRun.owner_id == target.id)
+    )
+    if owns_greybox:
+        raise HTTPException(
+            status_code=409,
+            detail="User owns grey-box targets or runs; deactivate the user instead "
+                   "(or delete their grey-box targets first).",
         )
     await session.delete(target)
     await session.commit()

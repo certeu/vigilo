@@ -11,7 +11,7 @@ export function setToken(t: string | null): void {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   const token = getToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -34,10 +34,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     }
   }
   if (!resp.ok) {
-    const detail =
+    // Rich error for the UI (422 lists, 409 {detail, run_id}) from the body read
+    // once above; non-JSON error bodies get a plain "HTTP <status>" message.
+    const body = data ?? null;
+    const detail: unknown =
       (data as { detail?: unknown } | undefined)?.detail ??
       (raw ? `HTTP ${resp.status} ${resp.statusText}`.trim() : resp.statusText);
-    throw new ApiError(resp.status, String(detail));
+    throw new ApiError(resp.status, detailMessage(detail), detail, body);
   }
   if (resp.status === 204 || !raw) return undefined as T;
   if (data === undefined) {
@@ -48,8 +51,28 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return data as T;
 }
 
+// FastAPI 422 bodies carry `detail` as a list of {loc, msg, type}; render them as a
+// readable sentence instead of "[object Object]". The raw value stays on the error
+// (`detail`, `body`) for forms that map `loc` to field-level messages.
+function detailMessage(detail: unknown): string {
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((d) => (d && typeof d === "object" && "msg" in d ? String((d as { msg: unknown }).msg) : ""))
+      .filter(Boolean);
+    if (msgs.length) return msgs.join("; ");
+  }
+  return String(detail);
+}
+
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(
+    public status: number,
+    message: string,
+    /** Raw `detail` from the response body (string, or a 422 list), if any. */
+    public detail: unknown = message,
+    /** Full parsed JSON body, if any (e.g. 409 `{detail, run_id}`). */
+    public body: unknown = null,
+  ) {
     super(message);
   }
 }
@@ -240,6 +263,9 @@ export const api = {
       method: "POST", body: JSON.stringify({ ids }),
     }),
   credentials: () => request<Credential[]>("/credentials"),
+  createCredential: (body: { kind: string; label: string; secret: string; gitlab_base_url?: string | null }) =>
+    request<Credential>("/credentials", { method: "POST", body: JSON.stringify(body) }),
+  deleteCredential: (id: string) => request<void>(`/credentials/${id}`, { method: "DELETE" }),
   jobs: () => request<Job[]>("/jobs"),
   deleteJob: (id: string) => request<void>(`/jobs/${id}`, { method: "DELETE" }),
   patchJob: (id: string, body: Record<string, unknown>) =>

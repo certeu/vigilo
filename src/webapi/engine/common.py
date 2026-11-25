@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from typing import Any
 
 from src.webapi.logs import current_stage
@@ -255,9 +256,11 @@ async def refresh_run(run: Run, client_factory) -> None:
     returning a connected Temporal client."""
     if not run.workflow_id:
         return
+    closed_at = None
     try:
         client = await client_factory()
         desc = await client.get_workflow_handle(run.workflow_id).describe()
+        closed_at = getattr(desc, "close_time", None)
         mapped = WF_STATUS.get(getattr(desc.status, "value", None))
         if mapped:
             run.status = mapped
@@ -268,6 +271,14 @@ async def refresh_run(run: Run, client_factory) -> None:
     except Exception as exc:  # pragma: no cover - best-effort
         logger.warning("temporal refresh failed for %s: %s", run.id, exc)
     if run.status in TERMINAL:
+        # Record the end once: the workflow's own close time when Temporal reports it,
+        # else now (the first time this run is seen terminal). Never overwritten.
+        if run.finished_at is None:
+            if isinstance(closed_at, datetime):
+                run.finished_at = closed_at if closed_at.tzinfo else \
+                    closed_at.replace(tzinfo=timezone.utc)
+            else:
+                run.finished_at = datetime.now(timezone.utc)
         await drop_run_secrets(run)  # secrets only live while the run does
     # Best-effort current stage: the latest stage.started event.
     try:

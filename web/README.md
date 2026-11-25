@@ -12,7 +12,7 @@ the UI on its own for frontend development.
 ```bash
 # 1) Start the API with the fake engine + a seeded admin (no Docker/Temporal needed):
 cd ..   # repo root
-export VIGILO_JWT_SECRET=dev-secret VIGILO_EXECUTION_ENGINE=fake
+export VIGILO_DEV_MODE=true VIGILO_JWT_SECRET=dev-secret VIGILO_EXECUTION_ENGINE=fake
 export VIGILO_FERNET_KEY=$(.venv-webapi/bin/python -c "from src.webapi.security.vault import generate_key; print(generate_key())")
 export VIGILO_FIRST_ADMIN_EMAIL=admin@example.com VIGILO_FIRST_ADMIN_PASSWORD=change-me-now
 .venv-webapi/bin/python -m src.webapi.main   # :8080
@@ -42,7 +42,7 @@ npx playwright install --with-deps chromium
 npm run test:e2e     # logs in, drives create→run, writes screenshots to e2e/artifacts/
 ```
 
-## §17 visual critique checklist (do before calling the UI done)
+## Visual critique checklist (do before calling the UI done)
 
 Load each screen, screenshot, and check: spacing/alignment; CSS specificity bugs
 (e.g. two component classes cancelling padding); responsive breakage; and that the

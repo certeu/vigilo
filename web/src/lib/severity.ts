@@ -1,4 +1,4 @@
-// Severity ramp (spec §16) — desaturated, used ONLY for severity data viz.
+// Severity ramp — desaturated, used ONLY for severity data viz.
 export const SEVERITY_ORDER = [
   "critical",
   "high",
@@ -12,7 +12,7 @@ export const SEVERITY_COLORS: Record<string, string> = {
   high: "#C2410C",
   medium: "#B45309",
   low: "#4B5563",
-  informational: "#8A93A3",
+  informational: "#677082",
 };
 
 export const ACCENT = "#3B5BDB";
