@@ -65,23 +65,48 @@ def create_app(run_lifespan: bool = True) -> FastAPI:
             tasks.append(asyncio.create_task(
                 run_status_loop(_session_maker(), get_engine())
             ))
+            # Grey-box web platform: the optional in-process executor (dev).
+            # Separate process (`python -m src.greybox_web.worker`) is the default.
+            _s2 = _gs()
+            if _s2.greybox_web_enabled and _s2.greybox_executor == "inprocess":
+                from src.greybox_web.worker import worker_loop as _gb_loop
+                tasks.append(asyncio.create_task(
+                    _gb_loop(_session_maker()), name="greybox-worker"))
         try:
             yield
         finally:
             for t in tasks:
                 t.cancel()
 
-    app = FastAPI(title="Vigilo Platform API", version="1", lifespan=lifespan)
+    from src.webapi.settings import assert_secure_jwt_secret
+    from src.webapi.settings import get_settings as _get_settings
+    _s = _get_settings()
+    assert_secure_jwt_secret(_s)   # refuse the default / short signing secret
+
+    # Interactive docs + OpenAPI schema: on in dev, off in production unless
+    # VIGILO_API_DOCS_ENABLED=true.
+    _docs = _s.dev_mode if _s.api_docs_enabled is None else _s.api_docs_enabled
+    app = FastAPI(
+        title="Vigilo Platform API", version="1", lifespan=lifespan,
+        docs_url="/docs" if _docs else None,
+        redoc_url="/redoc" if _docs else None,
+        openapi_url="/openapi.json" if _docs else None,
+    )
 
     # Throttle brute-force login attempts (fastapi-users has none of its own).
     from src.webapi.ratelimit import LoginRateLimitMiddleware
-    from src.webapi.settings import get_settings as _get_settings
-    _s = _get_settings()
+    from src.webapi.security_headers import SecurityHeadersMiddleware
     app.add_middleware(
         LoginRateLimitMiddleware,
         max_failures=_s.login_max_failures,
         window_s=_s.login_failure_window_s,
+        trusted_proxies=_s.trusted_proxies,
     )
+    app.add_middleware(SecurityHeadersMiddleware, hsts=_s.hsts_enabled)  # outermost
+
+    # Logout revokes the token (bumps session_epoch); registered BEFORE fastapi-users'
+    # auth router so it takes precedence over that router's no-op logout.
+    app.include_router(users.logout_router, prefix="/auth/jwt", tags=["auth"])
 
     # Auth: /auth/jwt/login, /auth/jwt/logout
     app.include_router(
@@ -104,5 +129,9 @@ def create_app(run_lifespan: bool = True) -> FastAPI:
     app.include_router(webhooks.router)
     app.include_router(dashboard.router)
     app.include_router(invitations.router)
+    # Grey-box web platform (feature-flagged inside the routers; see src/greybox_web/api).
+    from src.greybox_web.api import build_routers as _greybox_routers
+    for _r in _greybox_routers():
+        app.include_router(_r)
 
     return app

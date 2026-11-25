@@ -34,7 +34,7 @@ ARROW = "#8FB4FF"
 FONT = os.environ.get("VIGILO_DIAGRAM_FONT", "Helvetica")
 
 
-def setup(width: float, height: float, pixel_width: int = 2400) -> None:
+def setup(width: float, height: float, pixel_width: int = 3600) -> None:
     """Frame size in scene units; render size follows at ``pixel_width``."""
     config.frame_width = width
     config.frame_height = height

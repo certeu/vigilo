@@ -1,11 +1,25 @@
 FROM python:3.13-slim
 WORKDIR /app
 # git: needed to clone GitLab repositories during ingestion.
-RUN apt-get update && apt-get install -y --no-install-recommends git \
+# bubblewrap: OS isolation for agent-written analysis tools (grey-box sandbox,
+# VIGILO_GREYBOX_SANDBOX_ISOLATION). It needs user namespaces at run time; see
+# deploy/config-reference.md.
+# libatomic1: required by the Node binary bundled with Playwright on arm64 hosts
+# (the browser layer below fails with "libatomic.so.1: cannot open" without it).
+RUN apt-get update && apt-get install -y --no-install-recommends git bubblewrap util-linux libatomic1 \
     && rm -rf /var/lib/apt/lists/*
 COPY pyproject.toml ./
 COPY src ./src
 COPY scripts ./scripts
 RUN pip install --no-cache-dir -e ".[webapi]"
+# The grey-box browser capability (Playwright + headless Chromium and its system
+# libraries). Build with --build-arg GREYBOX_BROWSER=0 to leave it out: the
+# capability is then reported unavailable and never offered to the agent.
+ARG GREYBOX_BROWSER=1
+RUN if [ "$GREYBOX_BROWSER" = "1" ]; then \
+      pip install --no-cache-dir -e ".[webapi,browser]" && \
+      python -m playwright install --with-deps chromium-headless-shell && \
+      rm -rf /var/lib/apt/lists/*; \
+    fi
 EXPOSE 8080
 CMD ["python", "-m", "src.webapi.main"]

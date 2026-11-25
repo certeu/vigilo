@@ -45,6 +45,33 @@ if [ "${VIGILO_EXECUTOR:-}" = "codex" ]; then
     export SSL_CERT_DIR=/etc/ssl/certs
     echo "Codex: installed custom CA from $CA_SRC" >&2
   fi
+  # Optional loopback TLS bridge (src/ai/tls_bridge.py, CODEX_TLS_BRIDGE=true): for model
+  # endpoints whose TLS front end rejects the key exchange the Codex CLI offers. The CLI
+  # then talks plain HTTP to 127.0.0.1 inside this container, and the bridge talks TLS
+  # (OpenSSL, verification on) to the real endpoint. Off by default.
+  case "${CODEX_TLS_BRIDGE:-}" in
+    1|true|TRUE|True|yes|YES)
+      _url="$(printf '%s' "${CODEX_BASE_URL:-https://api.openai.com/v1}" | tr -d '[:space:]')"
+      case "$_url" in
+        https://*)
+          _port="${CODEX_TLS_BRIDGE_PORT:-18443}"
+          _rest="${_url#https://}"
+          case "$_rest" in */*) _path="/${_rest#*/}" ;; *) _path="" ;; esac
+          su -m scanner -s /bin/bash -c "cd /app && while true; do \
+            python3 -m src.ai.tls_bridge --upstream '$_url' --listen 127.0.0.1:$_port; \
+            sleep 2; done" >>/tmp/codex_tls_bridge.log 2>&1 &
+          for _ in $(seq 1 50); do
+            (exec 3<>"/dev/tcp/127.0.0.1/$_port") 2>/dev/null && break
+            sleep 0.1
+          done
+          CODEX_BASE_URL="http://127.0.0.1:${_port}${_path}"
+          export CODEX_BASE_URL
+          echo "Codex: TLS bridge on 127.0.0.1:${_port} (log /tmp/codex_tls_bridge.log)" >&2
+          ;;
+        *) echo "WARN: CODEX_TLS_BRIDGE set but CODEX_BASE_URL is not https://; bridge not started" >&2 ;;
+      esac
+      ;;
+  esac
   config-codex || echo "WARN: config-codex failed" >&2
   # config-codex runs here as root; the agent runs codex as the (possibly remapped)
   # scanner user, which must be able to READ the generated config. Without this the

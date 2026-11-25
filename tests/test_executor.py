@@ -404,40 +404,6 @@ class TestHelpers:
 
 
 # ---------------------------------------------------------------------------
-# Greybox worker uses get_executor_type() (not raw env var)
-# ---------------------------------------------------------------------------
-
-
-class TestGreyboxWorkerUsesAbstraction:
-    """Verify the greybox worker routes through get_executor_type()."""
-
-    def test_worker_source_uses_get_executor_type(self):
-        import inspect
-        from pathlib import Path
-        worker_path = Path(__file__).resolve().parent.parent / "src" / "greybox" / "temporal" / "worker.py"
-        source = worker_path.read_text()
-        assert "get_executor_type()" in source
-        assert 'os.environ.get("VIGILO_EXECUTOR"' not in source
-
-
-# ---------------------------------------------------------------------------
-# Standalone report script uses abstraction
-# ---------------------------------------------------------------------------
-
-
-class TestStandaloneReportUsesAbstraction:
-    """Verify run_report_standalone.py uses the executor abstraction."""
-
-    def test_report_script_uses_executor_abstraction(self):
-        from pathlib import Path
-        script_path = Path(__file__).resolve().parent.parent / "scripts" / "run_report_standalone.py"
-        source = script_path.read_text()
-        assert "get_executor_type" in source
-        assert "from src.ai.executor import" in source
-        assert "if executor_type" in source
-
-
-# ---------------------------------------------------------------------------
 # Log output format parity between executors
 # ---------------------------------------------------------------------------
 

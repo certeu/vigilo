@@ -41,6 +41,16 @@ async def create_credential(
     session: AsyncSession = Depends(get_async_session),
 ) -> CredentialRead:
     vault = build_vault(get_settings())
+    if payload.kind == "login_account":
+        # Structure-check the secret here so a typo fails at creation, not at run
+        # start: {"user", "password", optional login_url / field names / method}.
+        from src.webapi.credential_guard import CredentialRejected, parse_login_secret
+        try:
+            parse_login_secret(payload.secret)
+        except CredentialRejected as exc:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"login_account secret is malformed: {exc}") from None
     cred = Credential(
         owner_id=user.id, kind=payload.kind, label=payload.label,
         secret_enc=vault.encrypt(payload.secret), gitlab_base_url=payload.gitlab_base_url,
@@ -68,10 +78,9 @@ async def delete_credential(
     session: AsyncSession = Depends(get_async_session),
 ) -> None:
     cred = await session.get(Credential, cred_id)
-    if cred is None:
-        return
-    if cred.owner_id != user.id and user.role != ROLE_ADMIN:
-        raise HTTPException(status_code=403, detail="Not your credential")
+    if cred is None or (cred.owner_id != user.id and user.role != ROLE_ADMIN):
+        # Another user's credential is indistinguishable from a missing one.
+        raise HTTPException(status_code=404, detail="Credential not found")
     # Jobs that selected this cookie credential lose the reference (their runs go back
     # to unauthenticated testing) rather than blocking the deletion or pointing at
     # nothing. Runs already in flight keep the copy stored in their own run record

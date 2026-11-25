@@ -13,11 +13,12 @@ from src.webapi.security.vault import generate_key
 
 @pytest.fixture
 def _env(monkeypatch, tmp_path):
-    monkeypatch.setenv("VIGILO_JWT_SECRET", "test-secret")
+    monkeypatch.setenv("VIGILO_JWT_SECRET", "test-secret-0123456789-abcdefghijklmnopqrstuvwxyz")
     monkeypatch.setenv("VIGILO_FERNET_KEY", generate_key())
     monkeypatch.setenv("VIGILO_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
     monkeypatch.setenv("VIGILO_JOBS_DATA_DIR", str(tmp_path / "jobs"))
     monkeypatch.setenv("VIGILO_UPLOADS_DIR", str(tmp_path / "uploads"))  # never the real /data
+    monkeypatch.setenv("VIGILO_API_DOCS_ENABLED", "true")  # tests read /openapi.json
     monkeypatch.setenv("VIGILO_LOGIN_MAX_FAILURES", "0")  # disable login throttle in tests
     from src.webapi.settings import get_settings
     get_settings.cache_clear()

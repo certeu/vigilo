@@ -38,6 +38,15 @@
 #   docker compose --env-file .env -f deploy/docker-compose.full.yml up --build -d
 #   → UI at  https://${VIGILO_HOSTNAME}   (http:// redirects to https://)
 #   Model credentials for the worker come from the repo-root .env (env_file below).
+#
+# ── Grey-box web platform (optional) ────────────────────────────────────────
+#   Off by default. To enable it set VIGILO_GREYBOX_WEB_ENABLED=true in .env and add the
+#   `greybox` profile so the executor process (service `greybox-worker`) is started:
+#     docker compose --env-file .env --profile greybox -f deploy/docker-compose.full.yml up --build -d
+#     docker compose ... --profile greybox up -d --scale greybox-worker=3   # more capacity
+#   The default executor mode is a separate process (VIGILO_GREYBOX_EXECUTOR=worker);
+#   `inprocess` runs it inside the API (development only). Details and every
+#   VIGILO_GREYBOX_* setting: deploy/config-reference.md.
 
 services:
   traefik:
@@ -165,6 +174,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.api
+    image: vigilo-api:latest         # shared with greybox-worker (one build)
     env_file:
       - path: ../.env
         required: false
@@ -194,7 +204,24 @@ services:
       VIGILO_SMTP_USER: ${VIGILO_SMTP_USER:-}
       VIGILO_SMTP_PASSWORD: ${VIGILO_SMTP_PASSWORD:-}
       VIGILO_SMTP_STARTTLS: ${VIGILO_SMTP_STARTTLS:-false}
+      # Proxies whose X-Forwarded-For the API believes: the UI's nginx (vigilo_net).
+      # Keep it to the hop(s) you control: the login throttle keys on this address.
+      VIGILO_TRUSTED_PROXIES: ${VIGILO_TRUSTED_PROXIES:-172.16.0.0/12,10.0.0.0/8,192.168.0.0/16}
       VIGILO_GLOBAL_CONCURRENT_RUN_CAP: ${VIGILO_GLOBAL_CONCURRENT_RUN_CAP:-2}
+      # Grey-box web platform (off by default). To enable: VIGILO_GREYBOX_WEB_ENABLED=true
+      # in .env AND start the executor with `--profile greybox` (service greybox-worker).
+      # The settings below are also read by that service; keep them identical.
+      VIGILO_GREYBOX_WEB_ENABLED: ${VIGILO_GREYBOX_WEB_ENABLED:-false}
+      VIGILO_GREYBOX_EXECUTOR: ${VIGILO_GREYBOX_EXECUTOR:-worker}
+      VIGILO_GREYBOX_ALLOW_PRIVATE_TARGETS: ${VIGILO_GREYBOX_ALLOW_PRIVATE_TARGETS:-false}
+      VIGILO_GREYBOX_BLOCKED_HOSTS: ${VIGILO_GREYBOX_BLOCKED_HOSTS:-}
+      VIGILO_GREYBOX_BLOCKED_ENDPOINTS: ${VIGILO_GREYBOX_BLOCKED_ENDPOINTS:-}
+      VIGILO_GREYBOX_MAX_ACTIVE_RUNS_PER_USER: ${VIGILO_GREYBOX_MAX_ACTIVE_RUNS_PER_USER:-2}
+      VIGILO_GREYBOX_WORKER_MAX_RUNS: ${VIGILO_GREYBOX_WORKER_MAX_RUNS:-2}
+      VIGILO_GREYBOX_LEASE_TTL_S: ${VIGILO_GREYBOX_LEASE_TTL_S:-60}
+      VIGILO_GREYBOX_HEARTBEAT_S: ${VIGILO_GREYBOX_HEARTBEAT_S:-10}
+      VIGILO_API_HOST: ${VIGILO_API_HOST:-0.0.0.0}
+      VIGILO_API_PORT: ${VIGILO_API_PORT:-8080}
       # temporal engine reaches Temporal by service name; keep it off the proxy
       NO_PROXY: temporal,localhost,127.0.0.1,postgres,mailhog,api
     volumes:
@@ -212,6 +239,75 @@ services:
     # proxied by nginx and has no router either.
     networks: [vigilo_net]
 
+  # Grey-box web platform executor (opt-in: `--profile greybox`, together with
+  # VIGILO_GREYBOX_WEB_ENABLED=true on the API). The API only QUEUES grey-box runs when
+  # VIGILO_GREYBOX_EXECUTOR=worker (the default); this process claims and executes them.
+  # Without it, runs sit in `queued` until the reaper fails them.
+  #   • Same image, database and settings as the API: it reads/writes the grey-box
+  #     tables and decrypts the target's cookie credential with the Fernet key.
+  #   • No published port, no router. It needs egress to the targets, Postgres and the
+  #     model endpoint: the exploration agent calls the LLM API directly from this
+  #     process, so it loads the repo-root .env for the model credentials (CODEX_*,
+  #     ANTHROPIC_*, LITELLM_*, VIGILO_EXECUTOR) like the white-box worker. Platform
+  #     secrets it never needs (JWT secret, admin login, SMTP credentials) are blanked
+  #     below; it has no Temporal or SMTP access.
+  #   • Scale with `docker compose ... up -d --scale greybox-worker=N`: claims are
+  #     conditional UPDATEs and a partial unique index allows one active run per target.
+  # The scope guard (VIGILO_GREYBOX_*, VIGILO_API_PORT/HOST, VIGILO_INTERNAL_*) is read
+  # from the SAME environment as the API: keep the two services' values identical.
+  greybox-worker:
+    profiles: ["greybox"]
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    image: vigilo-api:latest
+    env_file:
+      # the model backend credentials (ANTHROPIC_* / CODEX_* / LITELLM_*): the API
+      # resolves a run's model at start, the worker calls it
+      - path: ../.env
+        required: false
+    environment:
+      VIGILO_DATABASE_URL: postgresql+asyncpg://vigilo:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD - see header}@postgres:5432/vigilo
+      VIGILO_FERNET_KEY: ${VIGILO_FERNET_KEY:?generate one - see header}
+      # Platform secrets this process never needs: blank them (it runs an AI agent).
+      VIGILO_JWT_SECRET: ""
+      POSTGRES_PASSWORD: ""
+      VIGILO_SMTP_USER: ""
+      VIGILO_SMTP_PASSWORD: ""
+      VIGILO_FIRST_ADMIN_EMAIL: ""
+      VIGILO_FIRST_ADMIN_PASSWORD: ""
+      VIGILO_RUN_MIGRATIONS_ON_START: "false"     # the API owns migrations
+      VIGILO_GREYBOX_WEB_ENABLED: ${VIGILO_GREYBOX_WEB_ENABLED:-true}
+      VIGILO_GREYBOX_EXECUTOR: worker
+      VIGILO_GREYBOX_ALLOW_PRIVATE_TARGETS: ${VIGILO_GREYBOX_ALLOW_PRIVATE_TARGETS:-false}
+      VIGILO_GREYBOX_BLOCKED_HOSTS: ${VIGILO_GREYBOX_BLOCKED_HOSTS:-}
+      VIGILO_GREYBOX_BLOCKED_ENDPOINTS: ${VIGILO_GREYBOX_BLOCKED_ENDPOINTS:-}
+      VIGILO_GREYBOX_WORKER_MAX_RUNS: ${VIGILO_GREYBOX_WORKER_MAX_RUNS:-2}
+      VIGILO_GREYBOX_SANDBOX_ISOLATION: ${VIGILO_GREYBOX_SANDBOX_ISOLATION:-auto}
+      VIGILO_GREYBOX_LEASE_TTL_S: ${VIGILO_GREYBOX_LEASE_TTL_S:-60}
+      VIGILO_GREYBOX_HEARTBEAT_S: ${VIGILO_GREYBOX_HEARTBEAT_S:-10}
+      # Platform endpoints the scope guard must refuse as targets (must match the API).
+      VIGILO_API_HOST: ${VIGILO_API_HOST:-0.0.0.0}
+      VIGILO_API_PORT: ${VIGILO_API_PORT:-8080}
+      VIGILO_INTERNAL_PORT: 8081
+      VIGILO_INTERNAL_API_URL: ${VIGILO_INTERNAL_API_URL:-http://api:8081}
+      # Keep the internal hostnames off any corporate proxy; targets still use it if set.
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,postgres,api}
+      no_proxy: ${NO_PROXY:-localhost,127.0.0.1,postgres,api}
+    command: ["python", "-m", "src.greybox_web.worker"]
+    # Enable generated-tool namespaces only on this isolated worker. The worker
+    # drops every capability except those used to launch bubblewrap as nobody.
+    security_opt: ["seccomp=unconfined", "apparmor=unconfined"]
+    cap_drop: ["ALL"]
+    cap_add: ["SETUID", "SETGID"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started        # migrations run at API boot
+    restart: unless-stopped
+    networks: [vigilo_net]           # internal only — no published port
+
   ui:
     build:
       context: ../web
@@ -220,6 +316,10 @@ services:
       - api
     restart: unless-stopped
     networks: [vigilo_net]
+    volumes:
+      # Trust Traefik for the real client address (replaced by an empty file in
+      # docker-compose.plain.yml, where nothing is in front of nginx).
+      - ./nginx-realip-traefik.conf:/etc/nginx/vigilo-realip.conf:ro
     # The ONLY public router: UI over HTTPS. nginx (inside this image) serves the
     # SPA and proxies /api → api:8080 internally, so the API needs no router.
     labels:
