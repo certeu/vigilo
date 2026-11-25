@@ -77,13 +77,16 @@ class TestJobs:
 
 
 class TestRunLifecycle:
-    async def test_run_starts_via_engine(self, client, user_token, fake_engine):
+    async def test_run_starts_via_engine(self, client, user_token, fake_engine, settle):
         repo = await _make_repo(client, user_token)
         job = (await _make_job(client, user_token, repo["id"])).json()
         h = {"Authorization": f"Bearer {user_token}"}
         run = await client.post(f"/jobs/{job['id']}/run", headers=h)
         assert run.status_code == 201, run.text
-        body = run.json()
+        # The endpoint answers as soon as the run is queued; the engine launch is async.
+        assert run.json()["status"] == "queued"
+        await settle()
+        body = (await client.get(f"/runs/{run.json()['id']}", headers=h)).json()
         assert body["status"] == "running"
         assert body["workflow_id"]
         assert body["id"] in fake_engine.started
