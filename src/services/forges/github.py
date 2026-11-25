@@ -40,5 +40,9 @@ class GitHubForge(Forge):
 
     def access_token(self, kind: str, secret: str, remote_url: str) -> str:
         if kind == GITHUB_APP_KIND:
-            return github_app.installation_token(secret, remote_url)
+            # Minting talks to the host's REST API before git ever runs: the API host
+            # gets the same SSRF policy as git (vetted, pinned, no redirects).
+            from src.webapi.ingestion import resolve_git_host
+            return github_app.installation_token(secret, remote_url,
+                                                 resolve=resolve_git_host)
         return secret

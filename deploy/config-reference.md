@@ -132,7 +132,8 @@ that host:
   access is needed, Vigilo mints a short-lived installation token limited to that one
   repository and `contents: read`; it is never stored. A fixed `installation_id` must be the
   App's installation on the repository's owner (organisation or user); leave it empty to have
-  Vigilo look up the installation for the repository.
+  Vigilo look up the installation for the repository. The token requests go to the vetted
+  address of the API host directly, without an HTTP(S) proxy from the environment.
 
 A GitHub Enterprise Server host on a private address must be listed in
 `VIGILO_GITLAB_ALLOWED_HOSTS`, like an internal GitLab. Pushing fixes back and webhooks are
@@ -216,7 +217,7 @@ a separate API listener. Never publish or proxy its port.
 | `VIGILO_DEV_MODE` | `false` | local development only: accept a weak/default JWT secret and serve `/docs`, `/redoc`, `/openapi.json` |
 | `VIGILO_API_DOCS_ENABLED` | (follows `VIGILO_DEV_MODE`) | `true`/`false` forces the interactive API docs and OpenAPI schema on/off |
 | `VIGILO_HSTS_ENABLED` | `false` | send `Strict-Transport-Security` from the API (set only when it is served over https; Traefik already sends it in the full stack) |
-| `VIGILO_GITLAB_ALLOWED_HOSTS` | (empty) | comma-separated hostnames a repository URL may use even though they resolve to private addresses (your GitLab or GitHub Enterprise Server). The host of the worker's `GITLAB_URL` is allowed too. Any other host resolving to loopback/private/link-local/metadata/multicast/reserved addresses is refused (`git ls-remote`/clone are pinned to the vetted address and do not follow redirects; metadata/link-local are refused even for allowlisted hosts) |
+| `VIGILO_GITLAB_ALLOWED_HOSTS` | (empty) | comma-separated hostnames a repository URL may use even though they resolve to private addresses (your GitLab or GitHub Enterprise Server). The host of the worker's `GITLAB_URL` is allowed too. Any other host resolving to loopback/private/link-local/metadata/multicast/reserved addresses is refused (`git ls-remote`/clone and the GitHub App token requests are pinned to the vetted address and do not follow redirects; metadata/link-local are refused even for allowlisted hosts) |
 | `VIGILO_REPO_ALLOW_PRIVATE_HOSTS` | `false` | dev/test only: lift the private-range deny for every repository host |
 | `VIGILO_API_HOST` / `VIGILO_API_PORT` | `0.0.0.0` / `8080` | where the public API binds. The grey-box scope guard refuses these endpoints (and 8080) as targets |
 

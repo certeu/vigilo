@@ -22,11 +22,15 @@ used.
 from __future__ import annotations
 
 import base64
+import functools
+import http.client
 import json
 import re
+import socket
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from urllib.parse import quote, urlsplit
 
@@ -177,6 +181,50 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    """Connects to a vetted address instead of resolving the host again (no DNS
+    rebinding between the check and the request); TLS still verifies the host name."""
+
+    def __init__(self, *args, pinned_ip: str, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._pinned_ip = pinned_ip
+
+    def connect(self):
+        sock = socket.create_connection((self._pinned_ip, self.port), self.timeout,
+                                        self.source_address)
+        self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
+
+
+class _PinnedHTTPSHandler(urllib.request.HTTPSHandler):
+    def __init__(self, host: str, port: int, ip: str):
+        super().__init__()
+        self._host, self._port, self._ip = host, port, ip
+
+    def https_open(self, req):
+        parts = urlsplit(req.full_url)
+        if (parts.hostname or "").lower().rstrip(".") != self._host or (parts.port or 443) != self._port:
+            raise urllib.error.URLError("request to a host that was not vetted")
+        return self.do_open(functools.partial(_PinnedHTTPSConnection, pinned_ip=self._ip),
+                            req, context=self._context)
+
+
+# ``resolve(url) -> (host, port, ips)``: vets the host and raises ValueError if it is
+# not allowed (``src.webapi.ingestion.resolve_git_host``).
+Resolver = Callable[[str], tuple[str, int, list[str]]]
+
+
+def pinned_opener(api_base: str, resolve: Resolver):
+    """An opener for the GitHub REST API at ``api_base``: the host is vetted with
+    ``resolve`` and every request goes to the vetted address. No proxy from the
+    environment, no redirects."""
+    try:
+        host, port, ips = resolve(api_base)
+    except ValueError as exc:
+        raise GitHubAppError(str(exc)) from None
+    return urllib.request.build_opener(
+        urllib.request.ProxyHandler({}), _NoRedirect, _PinnedHTTPSHandler(host, port, ips[0]))
+
+
 def _api_request(method: str, url: str, bearer: str, body: dict | None = None,
                  opener=None) -> dict:
     """One GitHub REST call. Redirects are refused (the bearer must not travel to
@@ -214,12 +262,17 @@ def _api_request(method: str, url: str, bearer: str, body: dict | None = None,
         raise GitHubAppError("GitHub API returned a non-JSON response") from None
 
 
-def installation_token(secret: str, repo_url: str, opener=None) -> str:
+def installation_token(secret: str, repo_url: str, opener=None,
+                       resolve: Resolver | None = None) -> str:
     """Mint an installation access token for ``repo_url`` with ``contents: read``,
-    restricted to that one repository. Valid for at most one hour; not stored."""
+    restricted to that one repository. Valid for at most one hour; not stored.
+
+    With ``resolve``, the API host is vetted first and pinned (see :func:`pinned_opener`)."""
     cfg = parse_app_secret(secret)
     repo = parse_repo_url(repo_url)
     api = repo.api_base
+    if opener is None and resolve is not None:
+        opener = pinned_opener(api, resolve)
     jwt = app_jwt(cfg)
     inst = cfg.installation_id
     if not inst:
