@@ -1,0 +1,35 @@
+{
+  "fixture": "orbit_graphql",
+  "mode": "web",
+  "seeded": [
+    {
+      "id": "O1",
+      "title": "Member can approve a change through the approver-only mutation",
+      "class": "broken_function_level_authorization",
+      "where": "POST /graphql approveChange mutation",
+      "truth": "The schema declares approveChange approver-only, but the resolver allows a member of the workspace to transition a pending change to APPROVED.",
+      "impact": "A member can approve a synthetic operational change without the required approver role.",
+      "proof": "As milo, approve chg-orbit-42 with a marker, then observe state APPROVED, approvedBy milo and the same marker; aria independently observes the audit event.",
+      "must_be_verified": true,
+      "state_changing": true,
+      "disposable_state": true,
+      "match": {"location_regex": "/graphql", "text_regex": "(?i)approve|role|function|state|transition"}
+    }
+  ],
+  "accounts": [
+    {"user": "aria", "password": "Orbit-Aria-6w!Qp2", "role": "approver", "workspace": "orbit"},
+    {"user": "milo", "password": "Orbit-Milo-8r#Ks4", "role": "member", "workspace": "orbit"},
+    {"user": "sana", "password": "Orbit-Sana-3t$Lv9", "role": "approver", "workspace": "nova"}
+  ],
+  "negative_controls": [
+    {"id": "NC1", "truth": "milo cannot update workspace configuration because the approver role is enforced", "operation": "updateWorkspaceName", "false_positive_if": {"location_regex": "/graphql", "text_regex": "(?i)updateWorkspaceName|workspace configuration"}},
+    {"id": "NC2", "truth": "cross-workspace reads and mutations return NOT_FOUND", "operation": "changeRequest and approveChange", "false_positive_if": {"location_regex": "/graphql", "text_regex": "(?i)cross.workspace|other workspace|tenant"}},
+    {"id": "NC3", "truth": "milo cannot cancel a change requested by aria", "operation": "cancelChange", "false_positive_if": {"location_regex": "/graphql", "text_regex": "(?i)cancelChange|cancel.*change"}},
+    {"id": "NC4", "truth": "GraphQL operations require a bearer token", "operation": "all non-introspection operations", "false_positive_if": {"location_regex": "/graphql", "text_regex": "(?i)unauthenticated|without.*token|authentication.*bypass"}}
+  ],
+  "expected_observations": [
+    "JSON service index identifies GraphQL and JSON-RPC endpoints",
+    "Schema advertises a requiresRole(approver) directive on approveChange",
+    "Users and change requests expose workspace, role, ownership and state relationships"
+  ]
+}

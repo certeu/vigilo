@@ -4,6 +4,7 @@ import { TrashIcon } from "@heroicons/react/24/outline";
 import { api, type Job, type Repository, type Run } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { StatusDot } from "../components/StatusDot";
+import { statusLabel } from "../lib/status";
 
 export function RunsList() {
   const [runs, setRuns] = useState<Run[]>([]);
@@ -66,7 +67,7 @@ export function RunsList() {
                   <td className="px-4 py-3">
                     <Link to={`/runs/${run.id}`} className="flex items-center gap-2">
                       <StatusDot status={run.status} />
-                      <span className="text-slate">{run.status}</span>
+                      <span className="text-slate">{statusLabel(run.status)}</span>
                     </Link>
                   </td>
                   <td className="px-4 py-3">

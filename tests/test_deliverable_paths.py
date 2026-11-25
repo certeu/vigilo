@@ -87,8 +87,9 @@ def test_save_rejects_other_locations(repo, base):
     outside = base / "secret.txt"
     outside.write_text("secret")
     (repo / "escape").symlink_to(outside)
-    for path in (str(outside), "../secret.txt", "escape", "/etc/hosts",
-                 "deliverables/../../secret.txt"):
+    rel = os.path.relpath(outside, repo)
+    for path in (str(outside), rel, "escape", "/etc/hosts",
+                 os.path.join("deliverables", "..", rel)):
         code, out = _run(SAVE, repo, "--type", "REPORT", "--file-path", path)
         assert code == 1 and "traversal" in out["message"], path
     assert not (repo / "deliverables" / "comprehensive_security_assessment_report.md").exists()

@@ -1,0 +1,39 @@
+{
+  "name": "Orbit Change Control",
+  "mode": "web",
+  "port": 18646,
+  "health_path": "/",
+  "objective": "Assess Orbit Change Control, an API-only GraphQL and JSON-RPC application, for security weaknesses. Explore its change-request functionality with the provided identities and validate findings using reproducible evidence.",
+  "scope": {
+    "activity": {
+      "state_changing": true,
+      "resource_lifecycle": "disposable_resettable"
+    }
+  },
+  "accounts": [
+    {
+      "label": "aria",
+      "user": "aria",
+      "password": "Orbit-Aria-6w!Qp2",
+      "login_url": "/rpc",
+      "body": "jsonrpc",
+      "user_field": "username"
+    },
+    {
+      "label": "milo",
+      "user": "milo",
+      "password": "Orbit-Milo-8r#Ks4",
+      "login_url": "/rpc",
+      "body": "jsonrpc",
+      "user_field": "username"
+    },
+    {
+      "label": "sana",
+      "user": "sana",
+      "password": "Orbit-Sana-3t$Lv9",
+      "login_url": "/rpc",
+      "body": "jsonrpc",
+      "user_field": "username"
+    }
+  ]
+}

@@ -1,0 +1,118 @@
+{
+  "fixture": "fjord_intranet",
+  "name": "Fjord Intranet",
+  "mode": "web",
+  "role": "clean control (Fixture E): no seeded vulnerability; measures false positives",
+  "target": "Fjord Intranet (tests/greybox_web/fixtures/fjord_intranet)",
+  "technology": ["server-rendered HTML + JSON API", "cookie session + CSRF", "hardened headers",
+                 "Starlette/uvicorn (no version banner)"],
+  "functionality": [
+    "login form with a session-bound CSRF token (POST /login) and JSON login (POST /api/session); logout (POST /logout, DELETE /api/session)",
+    "dashboard with status message, pending leave count and announcements",
+    "staff directory with search and pagination (/directory, /api/directory?q=&page=&per_page=)",
+    "personal leave requests: list (paginated), detail, create (/leave, /leave/{id}, /api/leave, /api/leave/{id}, POST /api/leave)",
+    "leave approval for HR admins only (POST /api/leave/{id}/approve, /api/admin/leave, /admin)",
+    "payslips with UUID ids (/payslips, /payslips/{uuid}, /api/payslips, /api/payslips/{uuid})",
+    "team documents restricted to the caller's team (/teams, /api/teams/{team}/documents[/{doc}])",
+    "announcements visible to every employee (/announcements, /api/announcements)",
+    "profile view and edit of harmless fields only (/profile, GET/PATCH /api/me)",
+    "search over people and announcements (/search, /api/search)",
+    "public: /healthz, /api/version, /robots.txt, /.well-known/security.txt, /static/app.js, /static/app.css"
+  ],
+  "accounts": [
+    {"label": "sofia", "user": "sofia", "password": "Fjord-Sofia-7q!Lantern-2025", "role": "employee", "team": "finance"},
+    {"label": "jonas", "user": "jonas", "password": "Fjord-Jonas-3x!Harbour-2025", "role": "employee", "team": "engineering"}
+  ],
+  "data_only_accounts": [
+    {"user": "hr.admin", "role": "admin", "team": "hr", "note": "password is random per process and never handed out; owns leave 304/310 and payslip d7a0c3f6-..."}
+  ],
+  "login": {
+    "path": "/login",
+    "user_field": "username",
+    "password_field": "password",
+    "body": "form with csrf token (also JSON at /api/session)",
+    "csrf": "GET /login sets an anonymous fjord_session pre-session and renders hidden input csrf_token bound to it; POST /login (application/x-www-form-urlencoded) must echo it. On success the session id is rotated and the response is 303 to a validated same-site 'next' (default /dashboard). Alternative: POST /api/session with Content-Type application/json {username,password} (no token; JSON-only + same-origin Origin check + no CORS). After login every state change needs header X-CSRF-Token equal to the session token, available in <meta name=\"csrf-token\"> on every page and from GET /api/session."
+  },
+  "resources": [
+    {"path": "/api/leave/{id}", "ids": {"sofia": [301, 303, 306, 308, 309, 312, 314], "jonas": [302, 305, 307, 311, 313], "hr.admin": [304, 310]}, "control": "ownership; others' ids return the same 404 as non-existent ids"},
+    {"path": "/api/payslips/{uuid}", "ids": {"sofia": ["3f6c2b1e-8a4d-4c7e-9b1a-5d2e7f9a0c11", "8b1d4e7a-2c5f-4a9e-b3d6-0e1f2a3b4c22", "c2e5f8a1-4b7d-4e0a-8c3f-6a9b2d5e8f33"], "jonas": ["1a4d7f0c-3e6b-4d9a-a2c5-8e1b4f7a0d44", "5e8b1c4f-7a0d-4f3c-b6e9-2c5f8b1e4a55", "9c2f5a8d-1e4b-4b7f-8d0a-4f7c0e3b6d66"], "hr.admin": ["d7a0c3f6-9b2e-4c5a-9f8d-1b4e7a0d3c77"]}, "control": "ownership; identical 404"},
+    {"path": "/api/teams/{team}/documents", "teams": {"finance": ["fin-q3-close", "fin-expense-policy"], "engineering": ["eng-oncall", "eng-adr-index"], "hr": ["hr-salary-bands"], "it": ["it-laptop-refresh"]}, "control": "membership; other or unknown team -> 403; a document requested under the wrong team -> 404"},
+    {"path": "/admin, /api/admin/leave, POST /api/leave/{id}/approve", "control": "role admin only -> 403 for employees (role checked before lookup)"},
+    {"path": "PATCH /api/me", "control": "CSRF + only status_message (<=140), pronouns (<=20), office_location (Bergen|Oslo|Tromsø|Remote); any other key (role, team, email ...) -> 400"},
+    {"path": "POST /api/leave", "control": "CSRF + owner is always the session user; only start, end, kind, note accepted; status always pending"}
+  ],
+  "seeded": [],
+  "design_choices": [
+    {"id": "DC1", "what": "staff directory exposes colleagues' name, team, title, office extension and work e-mail to all signed-in employees", "why": "intended intranet feature; requires authentication; no private data (no home address, salary, personal phone)"},
+    {"id": "DC2", "what": "robots.txt contains 'Disallow: /admin'", "why": "crawler hint only; /admin is authenticated and role-checked"},
+    {"id": "DC3", "what": "/static/app.js embeds a public config {appName, supportEmail}", "why": "non-secret, intentionally public"},
+    {"id": "DC4", "what": "ETag on static assets and API responses, random X-Request-Id on every response", "why": "caching and support correlation; neither carries sensitive data"},
+    {"id": "DC5", "what": "/healthz returns only {\"status\":\"ok\"}; /api/version returns only {\"api\":\"v1\"}", "why": "monitoring and client compatibility; no versions, hosts or build data"},
+    {"id": "DC6", "what": "other users' leave ids / payslip ids and non-existent ids return the same 404", "why": "deliberate: hides existence; sequential leave ids are not a weakness because ownership is enforced"},
+    {"id": "DC7", "what": "unknown teams and other teams both answer 403 on team documents", "why": "membership check before lookup; team names are public via the directory anyway"},
+    {"id": "DC8", "what": "OPTIONS answers 204 with an Allow header and no Access-Control-* headers", "why": "no CORS for any origin"},
+    {"id": "DC9", "what": "JSON login (POST /api/session) needs no CSRF token", "why": "JSON content type is mandatory (cross-site requires a preflight that is never granted), a foreign Origin is rejected with 403, cookie is SameSite=Strict"},
+    {"id": "DC10", "what": "per-account lockout after 10 consecutive failures for 15 minutes, with the same generic message", "why": "brute-force protection without user enumeration (unknown usernames behave identically)"}
+  ],
+  "lab_artefacts": [
+    {"id": "LA1", "what": "session cookie fjord_session without the Secure flag (and not __Host- prefixed) because the lab is plain http on loopback; production would set Secure", "acceptable_finding_class": ["hardening", "informational"]},
+    {"id": "LA2", "what": "no Strict-Transport-Security header and no TLS, because the lab is plain http on loopback (HSTS over http is ignored by browsers)", "acceptable_finding_class": ["hardening", "informational"]}
+  ],
+  "negative_controls": [
+    {"id": "NC1", "where": "GET /api/leave/{id}, /leave/{id}, GET /api/payslips/{uuid}, /payslips/{uuid}",
+     "truth": "ownership enforced: sofia gets 404 for jonas's 302 and his payslips, byte-identical to non-existent ids",
+     "false_positive_if": {"location_regex": "/(api/)?(leave|payslips)/", "text_regex": "(?i)author|access|idor|bola|own|readable|enumerat"}},
+    {"id": "NC2", "where": "GET /api/teams/{team}/documents[/{doc}]",
+     "truth": "membership enforced: other and unknown teams -> 403; doc under wrong team -> 404",
+     "false_positive_if": {"location_regex": "/api/teams/", "text_regex": "(?i)author|access|idor|bola|member|readable|other team"}},
+    {"id": "NC3", "where": "/admin, /api/admin/leave, POST /api/leave/{id}/approve",
+     "truth": "admin role enforced; employees get 403, anonymous users are redirected to /login (pages) or get 401 (API)",
+     "false_positive_if": {"location_regex": "/admin|/approve", "text_regex": "(?i)author|privilege|escalat|role|bypass|access control|readable"}},
+    {"id": "NC4", "where": "all responses",
+     "truth": "no Access-Control-Allow-Origin / -Credentials for any Origin, including preflights",
+     "false_positive_if": {"location_regex": ".", "text_regex": "(?i)cors|cross-origin resource sharing|access-control-allow|origin reflect"}},
+    {"id": "NC5", "where": "all responses (HTML, API, static, errors, OPTIONS)",
+     "truth": "CSP with frame-ancestors 'none', X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy, COOP/CORP present; no Server / X-Powered-By",
+     "false_positive_if": {"location_regex": ".", "text_regex": "(?i)(missing|absent|lack|without|no ).{0,40}(content-security|csp|nosniff|x-content-type|referrer|frame|permissions-policy)|clickjack|x-powered-by|server banner|version disclos"}},
+    {"id": "NC6", "where": "/api/directory, /directory, /api/search",
+     "truth": "intended staff directory (DC1), authenticated only",
+     "false_positive_if": {"location_regex": "/(api/)?(directory|search)", "text_regex": "(?i)pii|personal data|enumerat|e-?mail.{0,30}(leak|disclos|expos)|(leak|disclos|expos).{0,30}(e-?mail|employee|staff|user)|harvest"}},
+    {"id": "NC7", "where": "/robots.txt",
+     "truth": "Disallow: /admin is a crawler hint; /admin is protected (DC2)",
+     "false_positive_if": {"location_regex": "robots|/admin", "text_regex": "(?i)robots.{0,60}(disclos|leak|expos|reveal|sensitive|hidden)|(disclos|leak|expos|reveal).{0,60}robots"}},
+    {"id": "NC8", "where": "error pages, /healthz, /api/version, /static/app.js, ETag, X-Request-Id",
+     "truth": "generic errors without stack traces; minimal health/version; public config only (DC3-DC5)",
+     "false_positive_if": {"location_regex": ".", "text_regex": "(?i)stack ?trace|traceback|verbose error|debug (mode|page|output)|internal (host|path|ip)|(secret|api ?key|credential).{0,20}(leak|disclos|expos)|etag.{0,30}(inode|leak|disclos)|request-id.{0,30}(leak|disclos|sensitive)|version disclos|information disclos"}},
+    {"id": "NC9", "where": "PATCH /api/me, POST /api/leave, POST /api/leave/{id}/approve, DELETE /api/session, POST /login, POST /logout, POST /api/session",
+     "truth": "session-bound CSRF token required (header X-CSRF-Token or form csrf_token) plus same-origin Origin check; JSON login protected per DC9",
+     "false_positive_if": {"location_regex": ".", "text_regex": "(?i)csrf|cross-site request forgery|login forgery"}},
+    {"id": "NC10", "where": "/search?q=, profile status_message on /dashboard and /profile",
+     "truth": "all output HTML-escaped; CSP script-src 'self' without inline scripts",
+     "false_positive_if": {"location_regex": "/(api/)?(search|me|profile|dashboard|directory)", "text_regex": "(?i)xss|cross-site scripting|script injection|html injection"}},
+    {"id": "NC11", "where": "/login?next=",
+     "truth": "next accepts only same-site paths ('//', '\\\\', absolute URLs fall back to /dashboard)",
+     "false_positive_if": {"location_regex": "/login", "text_regex": "(?i)open redirect|unvalidated redirect"}},
+    {"id": "NC12", "where": "POST /login, POST /api/session",
+     "truth": "generic error for unknown user and wrong password, session id rotated on login, lockout after 10 failures (DC10)",
+     "false_positive_if": {"location_regex": "/login|/api/session", "text_regex": "(?i)user(name)? enumerat|account enumerat|session fixation|no (rate.?limit|lockout)|brute.?force"}},
+    {"id": "NC13", "where": "PATCH /api/me, POST /api/leave",
+     "truth": "unknown fields (role, team, owner, status ...) rejected with 400; owner always the session user",
+     "false_positive_if": {"location_regex": "/api/(me|leave)", "text_regex": "(?i)mass.?assign|privilege|role (change|escalat)|parameter pollution|over.?post"}}
+  ],
+  "expected_observations": [
+    "both accounts sign in (form with CSRF token, or JSON /api/session) and receive a rotated HttpOnly SameSite=Strict fjord_session cookie",
+    "sofia's and jonas's leave and payslip ids are mutually inaccessible (404 identical to non-existent)",
+    "team documents are visible only for the caller's own team (403 otherwise)",
+    "/admin and admin APIs answer 403 to both accounts",
+    "state-changing requests without a valid X-CSRF-Token are rejected with 403",
+    "no CORS headers for a foreign Origin, including preflights",
+    "strict security headers on every response; no Server / X-Powered-By",
+    "directory shows colleagues' work contact details by design",
+    "the cookie lacks Secure and there is no HSTS only because the lab is plain http (LA1, LA2)",
+    "conclusion: no exploitable vulnerability found"
+  ],
+  "fp_policy": {
+    "unmatched_allowed_classes": ["informational", "hardening"],
+    "note": "any verified finding of class vulnerability or misconfiguration is a false positive; hardening/informational findings are reviewed manually for accuracy (LA1/LA2 are acceptable)"
+  }
+}
