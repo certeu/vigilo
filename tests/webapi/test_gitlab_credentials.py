@@ -16,6 +16,14 @@ def _fake_runner(returncode=0, stdout="", stderr=""):
     return run
 
 
+@pytest.fixture(autouse=True)
+def _public_dns(monkeypatch):
+    """The repo-host SSRF guard resolves the host: give example hosts a public address."""
+    from src.webapi import ingestion
+    monkeypatch.setattr(ingestion, "_getaddrinfo", lambda h, p, **k: [
+        (2, 1, 6, "", ("93.184.216.34", p))])
+
+
 class TestValidateGitlabAccess:
     def test_success_returns_ref_count(self):
         runner = _fake_runner(0, "abc123\trefs/heads/main\ndef456\trefs/heads/dev\n")

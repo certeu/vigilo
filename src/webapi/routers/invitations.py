@@ -6,13 +6,15 @@ import logging
 import secrets
 import uuid
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi_users.password import PasswordHelper
+from fastapi_users import InvalidPasswordException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.webapi.auth.deps import require_admin
+from src.webapi.auth.users import UserManager, get_user_manager
 from src.webapi.db import get_async_session
 from src.webapi.mailer_provider import get_mailer
 from src.webapi.models import Invitation, User
@@ -111,19 +113,23 @@ async def revoke_invitation(
 async def accept_invite(
     payload: AcceptInvite,
     session: AsyncSession = Depends(get_async_session),
+    manager: UserManager = Depends(get_user_manager),
 ) -> dict:
     inv = await session.scalar(
         select(Invitation).where(Invitation.token == payload.token)
     )
     if inv is None or inv.accepted_at is not None:
         raise HTTPException(status_code=400, detail="Invalid or already-used invitation")
-    if len(payload.password) < 8:
-        raise HTTPException(status_code=422, detail="Password too short (min 8)")
+    # Same validator as signup / change / reset (length, email, trivially weak).
+    try:
+        await manager.validate_password(payload.password, SimpleNamespace(email=inv.email))
+    except InvalidPasswordException as exc:
+        raise HTTPException(status_code=422, detail=exc.reason)
     # Guard against a race where the email got registered meanwhile.
     if await session.scalar(select(User).where(User.email == inv.email)):
         raise HTTPException(status_code=409, detail="User already exists")
     session.add(User(
-        email=inv.email, hashed_password=PasswordHelper().hash(payload.password),
+        email=inv.email, hashed_password=manager.password_helper.hash(payload.password),
         role=inv.role, is_active=True, is_superuser=False, is_verified=True,
     ))
     inv.accepted_at = datetime.now(timezone.utc)

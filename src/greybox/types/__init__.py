@@ -1,1 +1,0 @@
-"""Grey-box type definitions."""

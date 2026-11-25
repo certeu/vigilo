@@ -44,6 +44,24 @@ class TestCaptureTree:
         assert sorted(tree["paths"]) == ["b.txt", "pkg/a.py"]
         settings_mod.get_settings.cache_clear()
 
+    def test_capture_from_tar_gz_stored_under_a_zip_name(self, tmp_path, monkeypatch):
+        """Uploads are stored as <repo id>.zip whatever their format: a .tar.gz must
+        still list (wrapper directory stripped, like a zip)."""
+        import tarfile
+        from src.webapi import settings as settings_mod
+        monkeypatch.setenv("VIGILO_UPLOADS_DIR", str(tmp_path / "u4"))
+        settings_mod.get_settings.cache_clear()
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+            for name in ("._proj", "proj/pkg/a.py", "proj/pkg/._a.py", "proj/b.txt"):
+                info = tarfile.TarInfo(name); info.size = 1
+                tf.addfile(info, io.BytesIO(b"1"))
+        z = tmp_path / "repo4.zip"
+        z.write_bytes(buf.getvalue())
+        assert capture_repo_tree("repo4", str(z)) == 2   # macOS ._ sidecars skipped
+        assert sorted(read_repo_tree("repo4")["paths"]) == ["b.txt", "pkg/a.py"]
+        settings_mod.get_settings.cache_clear()
+
     def test_read_missing_returns_none(self, tmp_path, monkeypatch):
         from src.webapi import settings as settings_mod
         monkeypatch.setenv("VIGILO_UPLOADS_DIR", str(tmp_path / "u3"))

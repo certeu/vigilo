@@ -153,8 +153,8 @@ export function Jobs() {
             placeholder="Leave empty for source-only (code) analysis"
           />
           <p className="mt-1 text-xs text-slate">
-            Supplements the repository scan — the live app is used for reachability + agent
-            context. This is <b>not</b> a standalone black-box (URL-only) scan; a repository
+            Supplements the repository analysis — the live app is used for reachability + agent
+            context. This is <b>not</b> a standalone black-box (URL-only) analysis; a repository
             is always required.
           </p>
         </div>
