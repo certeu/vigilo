@@ -162,8 +162,10 @@ export interface ModelDefaults {
   model_small: string;
   model_medium: string;
   model_large: string;
+  /** Per executor: the model a tier falls back to when no value is set (.env or built-in). */
+  worker_defaults?: Record<string, Record<string, string>>;
 }
-export interface AdminConfig extends ModelDefaults {
+export interface AdminConfig extends Omit<ModelDefaults, "worker_defaults"> {
   default_max_concurrent_pipelines: number;
   global_concurrent_run_cap: number;
   smtp_host: string | null;
