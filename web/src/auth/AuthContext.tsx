@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, ApiError, getToken, setToken, type User } from "../api/client";
+import { api, getToken, setToken, setUnauthorizedHandler, type User } from "../api/client";
 
 interface AuthState {
   user: User | null;
@@ -32,19 +32,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     try {
       setUser(await api.me());
-    } catch (e) {
+    } catch {
+      // A 401 is handled by the unauthorized handler below (redirect to /login).
       setUser(null);
-      // 401 mid-session (expired/revoked token): drop it and send the user to
-      // /login so the "session expired" message shows on the auth page instead
-      // of surfacing as an error on whatever page they were on.
-      const status = e instanceof ApiError ? e.status : (e as { status?: number })?.status;
-      if (status === 401) {
-        setToken(null);
-        navigate("/login?reason=session_expired", { replace: true });
-      }
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // ANY 401 on an authenticated call (not just the initial /users/me): drop the user and
+  // redirect to /login so the "session expired" message shows on the auth page.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setUser(null);
+      navigate("/login?reason=session_expired", { replace: true });
+    });
+    return () => setUnauthorizedHandler(null);
   }, [navigate]);
 
   useEffect(() => {
