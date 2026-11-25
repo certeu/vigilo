@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { PlusIcon, TrashIcon, XMarkIcon, LockClosedIcon } from "@heroicons/react/24/outline";
+import { PlusIcon, TrashIcon, XMarkIcon, LockClosedIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon } from "@heroicons/react/24/outline";
 import { api, type Repository } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 
@@ -29,11 +29,14 @@ export function Repos() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // Pending confirmation: either a single repo or the current bulk selection.
   const [confirm, setConfirm] = useState<{ ids: string[]; label: string } | null>(null);
+  const [archivedRepos, setArchivedRepos] = useState<Repository[]>([]);
   const pollRef = useRef<number | null>(null);
 
   async function load() {
     try {
-      setRepos(await api.repositories());
+      const all = await api.repositories(true);
+      setRepos(all.filter((r) => !r.archived));
+      setArchivedRepos(all.filter((r) => r.archived));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load repositories");
     }
@@ -56,6 +59,27 @@ export function Repos() {
     setSelected(new Set());
     setConfirm(null);
     await load();
+  }
+
+  // Soft hide/restore: reversible, so no confirmation dialog.
+  async function setArchived(id: string, archived: boolean) {
+    try {
+      await api.updateRepository(id, { archived });
+      setSelected((prev) => { const n = new Set(prev); n.delete(id); return n; });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update repository");
+    }
+  }
+
+  async function archiveSelected() {
+    try {
+      await Promise.all([...selected].map((id) => api.updateRepository(id, { archived: true })));
+      setSelected(new Set());
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to archive repositories");
+    }
   }
   useEffect(() => {
     void load();
@@ -107,6 +131,13 @@ export function Repos() {
           <>
             <span className="text-slate">{selected.size} selected</span>
             <button
+              className="inline-flex items-center gap-1.5 rounded-md border border-severity-high/40 px-2.5 py-1 text-severity-high hover:bg-severity-high/5"
+              title="Archive the selected repositories (reversible)"
+              onClick={archiveSelected}
+            >
+              <ArchiveBoxIcon className="h-4 w-4" /> Archive selected
+            </button>
+            <button
               className="inline-flex items-center gap-1.5 rounded-md border border-severity-critical/40 px-2.5 py-1 text-severity-critical hover:bg-severity-critical/5"
               onClick={() => setConfirm({ ids: [...selected], label: `${selected.size} repositories` })}
             >
@@ -141,6 +172,13 @@ export function Repos() {
             </div>
             <Link to={`/repos/${r.id}`} className="btn-ghost py-1">Open</Link>
             <button
+              className="text-slate hover:text-ink"
+              title="Archive repository (hidden from all lists, reversible)"
+              onClick={() => void setArchived(r.id, true)}
+            >
+              <ArchiveBoxIcon className="h-4 w-4" />
+            </button>
+            <button
               className="text-slate hover:text-severity-critical"
               title="Delete repository"
               onClick={() => setConfirm({ ids: [r.id], label: `"${r.name}"` })}
@@ -151,6 +189,32 @@ export function Repos() {
         ))}
         {repos.length === 0 && <div className="px-4 py-8 text-center text-slate">No repositories yet.</div>}
       </div>
+
+      {archivedRepos.length > 0 && (
+        <>
+          <h2 className="mb-3 mt-8 text-lg font-semibold text-slate">Archived repositories</h2>
+          <div className="card divide-y divide-line">
+            {archivedRepos.map((r) => (
+              <div key={r.id} className="flex items-center gap-3 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-slate">{r.name}</div>
+                  <div className="mono text-xs text-slate">
+                    {r.source_type}
+                    {r.gitlab_url ? ` · ${r.gitlab_url}` : ""}
+                  </div>
+                </div>
+                <button
+                  className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-sm text-slate hover:bg-slate/5"
+                  title="Restore repository (unarchive)"
+                  onClick={() => void setArchived(r.id, false)}
+                >
+                  <ArchiveBoxXMarkIcon className="h-4 w-4" /> Unarchive
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {open && (
         <AddRepoModal

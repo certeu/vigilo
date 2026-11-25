@@ -209,6 +209,9 @@ class RepositoryUpdate(BaseModel):
     default_credential_id: uuid.UUID | None = None
     is_private: bool | None = None
     push_patches: bool | None = None
+    # Soft-hide the repository (and its runs/jobs) from every listing and from
+    # direct access, without deleting anything. Owner/admin only; reversible.
+    archived: bool | None = None
     pipeline_config: dict | None = None
     scan_config: dict | None = None
     # Add/replace the GitLab access token (encrypted as a new credential + linked).
