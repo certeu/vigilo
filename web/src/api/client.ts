@@ -162,6 +162,7 @@ export interface ModelDefaults {
   model_small: string;
   model_medium: string;
   model_large: string;
+  default_max_concurrent_pipelines: number;
 }
 export interface AdminConfig extends ModelDefaults {
   default_max_concurrent_pipelines: number;

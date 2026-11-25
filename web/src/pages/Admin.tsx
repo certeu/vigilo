@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api, type AdminConfig, type Invitation, type User } from "../api/client";
 import { ModelsExecutorSection } from "../components/ModelsExecutorSection";
+import { InfoTip } from "../components/InfoTip";
 import { EgressProxiesSection } from "../features/admin/EgressProxiesSection";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 
@@ -227,11 +228,18 @@ export function Admin() {
           <h2 className="mb-3 text-sm font-semibold text-ink">Other global settings</h2>
           <div className="card divide-y divide-line">
             {([
-              ["Global run cap", String(cfg.global_concurrent_run_cap)],
-              ["SMTP host", cfg.smtp_host ?? "—"],
-            ] as [string, string][]).map(([k, v]) => (
-              <div key={k} className="flex items-center justify-between px-4 py-2 text-sm">
-                <span className="text-slate">{k}</span>
+              ["Max concurrent pipelines per run", String(cfg.default_max_concurrent_pipelines),
+               "Value actually used: stored in the database. Seeded at first boot from VIGILO_DEFAULT_MAX_CONCURRENT_PIPELINES in .env; changing the env var later has no effect. A per-repository pipeline_config override wins over it. Limits parallel pipeline agents within one run."],
+              ["Global run cap", String(cfg.global_concurrent_run_cap),
+               "Value actually used: stored in the database. Seeded at first boot from VIGILO_GLOBAL_CONCURRENT_RUN_CAP in .env. Limits the number of concurrent non-terminal runs across all repositories."],
+              ["SMTP host", cfg.smtp_host ?? "—",
+               "Value actually used: stored in the database. Seeded at first boot from VIGILO_SMTP_HOST in .env. Leave empty to disable notification emails."],
+            ] as [string, string, string?][]).map(([k, v, tip]) => (
+              <div key={k} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
+                <span className="flex items-center gap-1.5 text-slate">
+                  {k}
+                  {tip && <InfoTip text={tip} />}
+                </span>
                 <span className="mono">{v}</span>
               </div>
             ))}
