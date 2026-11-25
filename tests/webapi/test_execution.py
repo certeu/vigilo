@@ -84,7 +84,7 @@ class TestRunLifecycle:
         run = await client.post(f"/jobs/{job['id']}/run", headers=h)
         assert run.status_code == 201, run.text
         # The endpoint answers as soon as the run is queued; the engine launch is async.
-        assert run.json()["status"] == "queued"
+        assert run.json()["status"] in ("queued", "preparing")
         await settle()
         body = (await client.get(f"/runs/{run.json()['id']}", headers=h)).json()
         assert body["status"] == "running"
@@ -130,7 +130,7 @@ class TestRunLifecycle:
         run = await client.post(f"/jobs/{job['id']}/run",
                                 headers={"Authorization": f"Bearer {user_token}"})
         assert run.status_code == 201
-        assert run.json()["status"] == "queued"
+        assert run.json()["status"] == "queued"  # cap 0: nothing is admitted
         settings_mod.get_settings.cache_clear()
 
 

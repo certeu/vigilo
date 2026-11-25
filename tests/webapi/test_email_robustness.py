@@ -15,13 +15,14 @@ class _FailingMailer:
         raise RuntimeError("smtp down")
 
 
-async def _make_succeeded_run(client, user_token, session_maker):
+async def _make_succeeded_run(client, user_token, session_maker, settle):
     h = {"Authorization": f"Bearer {user_token}"}
     repo = (await client.post("/repositories", headers=h,
             json={"name": "r", "source_type": "upload"})).json()
     job = (await client.post("/jobs", headers=h, json={
         "repository_id": repo["id"], "name": "j", "stage_preset": "vuln", "notify_email": True})).json()
     run = (await client.post(f"/jobs/{job['id']}/run", headers=h)).json()
+    await settle()  # let the background engine launch finish before forcing the status
     async with session_maker() as s:
         r = await s.get(Run, uuid.UUID(run["id"]))
         r.status = RUN_SUCCEEDED
@@ -30,11 +31,11 @@ async def _make_succeeded_run(client, user_token, session_maker):
 
 
 class TestEmailFailure:
-    async def test_retries_capped_and_run_usable(self, client, user_token, session_maker):
+    async def test_retries_capped_and_run_usable(self, client, user_token, session_maker, settle):
         failing = _FailingMailer()
         client._app.dependency_overrides[get_mailer] = lambda: failing
         h = {"Authorization": f"Bearer {user_token}"}
-        run_id = await _make_succeeded_run(client, user_token, session_maker)
+        run_id = await _make_succeeded_run(client, user_token, session_maker, settle)
         # poll the run 8 times; email send fails every time
         for _ in range(8):
             resp = await client.get(f"/runs/{run_id}", headers=h)

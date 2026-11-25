@@ -120,7 +120,7 @@ class TestConcurrencyCap:
         t0 = time.monotonic()
         r = await client.post(f"/jobs/{job['id']}/run", headers=h)
         elapsed = time.monotonic() - t0
-        assert r.status_code == 201 and r.json()["status"] == "queued"
+        assert r.status_code == 201 and r.json()["status"] in ("queued", "preparing")
         assert elapsed < 1.0, f"endpoint blocked {elapsed:.2f}s on engine.start"
         # laisser la tâche de fond se terminer proprement
         release.set()
@@ -136,3 +136,52 @@ class TestConcurrencyCap:
                 await engine.start(run, job, repo)
                 await s.commit()
         return _launch_bg
+
+
+class TestAdmissionWithBackgroundLaunch:
+    async def test_cap_holds_while_launches_are_still_running(
+        self, client, user_token, monkeypatch, settle
+    ):
+        """engine.start runs in the background and can take minutes (clone). Runs being
+        launched must already count against the cap, otherwise N simultaneous requests
+        all pass the admission check and the global cap is exceeded."""
+        from sqlalchemy import select
+        from src.webapi import settings as settings_mod
+        from src.webapi.engine.provider import get_engine
+        from src.webapi.models import Run
+
+        monkeypatch.setenv("VIGILO_GLOBAL_CONCURRENT_RUN_CAP", "2")
+        settings_mod.get_settings.cache_clear()
+        release = asyncio.Event()
+        started: list[str] = []
+
+        class SlowEngine:
+            async def start(self, run, job, repo):
+                started.append(str(run.id))
+                await release.wait()  # simulates a long clone
+                run.status = RUN_RUNNING
+
+            async def cancel(self, run):
+                return None
+
+            async def refresh(self, run):
+                return None
+
+        client._app.dependency_overrides[get_engine] = lambda: SlowEngine()
+        job = await _repo_job(client, user_token)
+        h = {"Authorization": f"Bearer {user_token}"}
+        results = await asyncio.gather(
+            *[client.post(f"/jobs/{job['id']}/run", headers=h) for _ in range(8)]
+        )
+        assert all(r.status_code == 201 for r in results)
+        await asyncio.sleep(0.2)  # let the background launches reach engine.start
+
+        statuses = [r["status"] for r in (await client.get("/runs", headers=h)).json()]
+        active = sum(1 for s in statuses if s in ("preparing", "running"))
+        assert active <= 2, f"cap exceeded while launches were in flight: {statuses}"
+        assert statuses.count("queued") == 6
+        assert len(started) == 2
+
+        release.set()
+        await settle()
+        settings_mod.get_settings.cache_clear()
