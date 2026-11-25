@@ -705,6 +705,79 @@ async def run_agent(agent_name: str, input: ActivityInput) -> dict[str, Any]:
 # Preflight validation
 # ---------------------------------------------------------------------------
 
+async def _preflight_cookie_check(input: ActivityInput) -> None:
+    """Validate the job's session-cookie credential against the target, so an expired
+    cookie fails the run now instead of every agent testing logged out.
+
+    The cookie value is a session secret: this check logs neither it nor exception
+    messages (which can quote it, e.g. httpx's ``Illegal header value b'...'``)."""
+    if not (input.web_url and (input.auth or {}).get("cookie")):
+        return
+    cookie_cfg = await _with_cookie_login(None, input, "whitebox/surveyor")
+    auth_cfg = (cookie_cfg or {}).get("authentication", {})
+    if auth_cfg.get("login_type") == "cookie" and auth_cfg.get("cookie_header"):
+        cookie_val = auth_cfg["cookie_header"]
+        try:
+            import httpx
+            _LOGIN_KW = ("/login", "/auth", "/sso", "/cas/", "/oauth", "signin")
+            # Skip TLS verification for self-signed certificates
+            # (matches existing preflight reachability check below)
+            async with httpx.AsyncClient(
+                timeout=30, verify=False, follow_redirects=False,
+            ) as client:
+                resp = await client.get(
+                    input.web_url, headers={"Cookie": cookie_val},
+                )
+            expired = False
+            status = resp.status_code
+            if status in (401, 403):
+                expired = True
+            elif status in (301, 302, 303, 307, 308):
+                loc = (resp.headers.get("location") or "").lower()
+                if any(kw in loc for kw in _LOGIN_KW):
+                    expired = True
+            if expired:
+                raise ApplicationError(
+                    "The job's session cookie has expired or is invalid. "
+                    "Log in again in the browser and update the cookie "
+                    "credential selected on the job.",
+                    type="ConfigurationError",
+                    non_retryable=True,
+                )
+            # 404 = auth filter accepted the cookie, route just doesn't
+            # exist. Typical when web_url is the bare host of an API
+            # with no `/` handler (e.g. Spring returns 404 JSON only
+            # AFTER the security filter passes — a bad cookie would
+            # have produced 401 before routing).
+            if status == 404:
+                logger.info(
+                    "Pre-supplied cookie validated (404 at %s: auth passed, no `/` handler)",
+                    input.web_url,
+                )
+            elif 500 <= status < 600:
+                logger.warning(
+                    "Pre-supplied cookie check inconclusive: target returned %d. "
+                    "Cookie state cannot be confirmed; continuing.",
+                    status,
+                )
+            else:
+                logger.info(
+                    "Pre-supplied cookie validated successfully (status %d)",
+                    status,
+                )
+        except ApplicationError:
+            raise
+        except Exception as exc:
+            # Only the exception type: its message may quote the header value.
+            hint = (
+                " (the cookie is not a valid HTTP header value)"
+                if type(exc).__name__ == "LocalProtocolError" else ""
+            )
+            logger.warning(
+                "Cookie validation skipped (non-fatal): %s%s", type(exc).__name__, hint,
+            )
+
+
 @activity.defn
 async def preflight_validation(input: ActivityInput) -> None:
     """Preflight checks before any agent execution.
@@ -854,67 +927,8 @@ async def preflight_validation(input: ActivityInput) -> None:
         except Exception as exc:
             logger.warning("Credential validation skipped: %s", exc)
 
-        # 2.7. Validate the job's session-cookie credential against the target, so an
-        # expired cookie fails the run now instead of every agent testing logged out.
-        if input.web_url and (input.auth or {}).get("cookie"):
-            cookie_cfg = await _with_cookie_login(None, input, "whitebox/surveyor")
-            auth_cfg = (cookie_cfg or {}).get("authentication", {})
-            if auth_cfg.get("login_type") == "cookie" and auth_cfg.get("cookie_header"):
-                cookie_val = auth_cfg["cookie_header"]
-                try:
-                    import httpx
-                    _LOGIN_KW = ("/login", "/auth", "/sso", "/cas/", "/oauth", "signin")
-                    # Skip TLS verification for self-signed certificates
-                    # (matches existing preflight reachability check below)
-                    async with httpx.AsyncClient(
-                        timeout=30, verify=False, follow_redirects=False,
-                    ) as client:
-                        resp = await client.get(
-                            input.web_url, headers={"Cookie": cookie_val},
-                        )
-                    expired = False
-                    status = resp.status_code
-                    if status in (401, 403):
-                        expired = True
-                    elif status in (301, 302, 303, 307, 308):
-                        loc = (resp.headers.get("location") or "").lower()
-                        if any(kw in loc for kw in _LOGIN_KW):
-                            expired = True
-                    if expired:
-                        raise ApplicationError(
-                            "The job's session cookie has expired or is invalid. "
-                            "Log in again in the browser and update the cookie "
-                            "credential selected on the job.",
-                            type="ConfigurationError",
-                            non_retryable=True,
-                        )
-                    # 404 = auth filter accepted the cookie, route just doesn't
-                    # exist. Typical when web_url is the bare host of an API
-                    # with no `/` handler (e.g. Spring returns 404 JSON only
-                    # AFTER the security filter passes — a bad cookie would
-                    # have produced 401 before routing).
-                    if status == 404:
-                        logger.info(
-                            "Pre-supplied cookie validated (404 at %s: auth passed, no `/` handler)",
-                            input.web_url,
-                        )
-                    elif 500 <= status < 600:
-                        logger.warning(
-                            "Pre-supplied cookie check inconclusive: target returned %d. "
-                            "Cookie state cannot be confirmed; continuing.",
-                            status,
-                        )
-                    else:
-                        logger.info(
-                            "Pre-supplied cookie validated successfully (status %d)",
-                            status,
-                        )
-                except ApplicationError:
-                    raise
-                except Exception as exc:
-                    logger.warning(
-                        "Cookie validation skipped (non-fatal): %s", exc,
-                    )
+        # 2.7. Validate the job's session-cookie credential against the target.
+        await _preflight_cookie_check(input)
 
         # 3. Check target URL reachability (skip when no URL provided)
         if input.web_url:
