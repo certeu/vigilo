@@ -60,7 +60,9 @@ jobs:
           pytest tests -q -m slow --timeout=600 --durations=15
 
   frontend:
-    name: Frontend build and unit tests
+    # Job names are the check names the protected main branch requires ("Backend tests",
+    # "Frontend typecheck and build"): renaming a job blocks every pull request.
+    name: Frontend typecheck and build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
