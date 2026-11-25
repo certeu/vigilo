@@ -11,6 +11,14 @@ export function setToken(t: string | null): void {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
+// Called when an authenticated request comes back 401 (expired/revoked token). The auth
+// context registers it to drop the user and redirect to /login, so the session-expired
+// message shows on the login page instead of an error on whatever page was open.
+let onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(h: (() => void) | null): void {
+  onUnauthorized = h;
+}
+
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   const token = getToken();
@@ -19,7 +27,11 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     headers.set("Content-Type", "application/json");
   const resp = await fetch(`/api${path}`, { ...init, headers });
   if (resp.status === 401) {
+    // Only a request that carried a token means "session expired"; an anonymous 401
+    // must not trigger a redirect.
+    const hadToken = token !== null;
     setToken(null);
+    if (hadToken) onUnauthorized?.();
     throw new ApiError(401, "Session expired, please log in again");
   }
   // Read the body once: a non-JSON body (HTML error page, empty 502 from a

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
 export function Login() {
@@ -7,7 +7,12 @@ export function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [searchParams] = useSearchParams();
+  const [error, setError] = useState<string | null>(
+    searchParams.get("reason") === "session_expired"
+      ? "Your session has expired, please log in again."
+      : null,
+  );
   const [busy, setBusy] = useState(false);
 
   async function onSubmit(e: FormEvent) {

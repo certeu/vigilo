@@ -7,7 +7,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { api, getToken, setToken, type User } from "../api/client";
+import { useNavigate } from "react-router-dom";
+import { api, getToken, setToken, setUnauthorizedHandler, type User } from "../api/client";
 
 interface AuthState {
   user: User | null;
@@ -21,6 +22,7 @@ const AuthCtx = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   const refresh = useCallback(async () => {
     if (!getToken()) {
@@ -31,11 +33,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setUser(await api.me());
     } catch {
+      // A 401 is handled by the unauthorized handler below (redirect to /login).
       setUser(null);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  // ANY 401 on an authenticated call (not just the initial /users/me): drop the user and
+  // redirect to /login so the "session expired" message shows on the auth page.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setUser(null);
+      navigate("/login?reason=session_expired", { replace: true });
+    });
+    return () => setUnauthorizedHandler(null);
+  }, [navigate]);
 
   useEffect(() => {
     void refresh();
