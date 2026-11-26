@@ -322,6 +322,8 @@ class TestIngestion:
 
         monkeypatch.setattr(ingestion, "clone_repo", fake_clone)
         monkeypatch.setattr(ingestion, "scrub_origin_credentials", boom)
+        monkeypatch.setattr(ingestion, "_getaddrinfo", lambda h, p, **k: [
+            (2, 1, 6, "", ("93.184.216.34", p))])   # repo-host SSRF guard: public address
         with pytest.raises(RuntimeError, match="scrub"):
             ingestion.prepare_repo(source_type="gitlab", repo_dir=str(repo_dir),
                                    gitlab_url="https://gl.example/g/p.git", token="glpat-x")

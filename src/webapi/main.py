@@ -20,7 +20,7 @@ app = create_app()
 
 async def serve() -> None:
     s = get_settings()
-    public = uvicorn.Server(uvicorn.Config(app, host="0.0.0.0", port=8080))
+    public = uvicorn.Server(uvicorn.Config(app, host=s.api_host, port=s.api_port))
     internal = uvicorn.Server(uvicorn.Config(
         create_internal_app(), host=s.internal_host, port=s.internal_port, log_level="info",
     ))
