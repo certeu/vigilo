@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import { api, getToken, type Job, type Run, type TraceRailConfig } from "../api/client";
 import { TraceRail, type RailPhase } from "../components/TraceRail";
 import { StatusDot } from "../components/StatusDot";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { statusLabel } from "../lib/status";
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
@@ -93,6 +94,7 @@ const LEVEL_CLASS: Record<string, string> = {
 export function RunDetail() {
   const { id } = useParams<{ id: string }>();
   const [run, setRun] = useState<Run | null>(null);
+  const [confirmStop, setConfirmStop] = useState(false);
   const [job, setJob] = useState<Job | null>(null);
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [showAgentOutput, setShowAgentOutput] = useState(false);
@@ -251,11 +253,31 @@ export function RunDetail() {
           {run.commit_sha ? ` · commit ${run.commit_sha.slice(0, 8)}` : ""}
         </span>
         {!TERMINAL.has(run.status) && (
-          <button className="btn-ghost ml-auto" onClick={() => id && api.cancelRun(id).then(setRun)}>
+          <button className="btn-ghost ml-auto" onClick={() => setConfirmStop(true)}>
             Cancel
           </button>
         )}
       </div>
+
+      {confirmStop && (
+        <ConfirmDialog
+          title="Cancel run"
+          confirmLabel="OK"
+          cancelLabel="Back"
+          body={
+            <>
+              This cancels the scan; the run and its results so far are kept. A
+              cancelled scan cannot be restarted.
+            </>
+          }
+          onConfirm={async () => {
+            if (!id) return;
+            setRun(await api.cancelRun(id));
+            setConfirmStop(false);
+          }}
+          onCancel={() => setConfirmStop(false)}
+        />
+      )}
 
       {!TERMINAL.has(run.status) &&
         retries.map((e) => {
