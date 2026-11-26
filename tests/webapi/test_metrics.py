@@ -56,7 +56,7 @@ class TestExtract:
         assert extract_run_metrics(str(tmp_path), "nope") is None
 
 
-async def _mock_run(client, token, settle):
+async def _mock_run(client, token):
     """Create repo+job and run it with the MockEngine active, returning the run json."""
     from src.webapi.engine.mock import MockEngine
     client._app.dependency_overrides[get_engine] = lambda: MockEngine()
@@ -65,15 +65,13 @@ async def _mock_run(client, token, settle):
             json={"name": "demo", "source_type": "upload"})).json()
     job = (await client.post("/jobs", headers=h, json={
         "repository_id": repo["id"], "name": "j", "stage_preset": "full"})).json()
-    queued = (await client.post(f"/jobs/{job['id']}/run", headers=h)).json()
-    await settle()  # the engine launch runs in a background task after the 201
-    run = (await client.get(f"/runs/{queued['id']}", headers=h)).json()
+    run = (await client.post(f"/jobs/{job['id']}/run", headers=h)).json()
     return repo, run
 
 
 class TestDashboardEndpoints:
-    async def test_mock_run_produces_metrics(self, client, user_token, settle):
-        repo, run = await _mock_run(client, user_token, settle)
+    async def test_mock_run_produces_metrics(self, client, user_token):
+        repo, run = await _mock_run(client, user_token)
         h = {"Authorization": f"Bearer {user_token}"}
         assert run["status"] == "succeeded"
         # GET run triggers metric computation
@@ -82,8 +80,8 @@ class TestDashboardEndpoints:
         assert m.status_code == 200, m.text
         assert m.json()["total_findings"] > 0
 
-    async def test_repo_timeline_and_global(self, client, user_token, settle):
-        repo, run = await _mock_run(client, user_token, settle)
+    async def test_repo_timeline_and_global(self, client, user_token):
+        repo, run = await _mock_run(client, user_token)
         h = {"Authorization": f"Bearer {user_token}"}
         await client.get(f"/runs/{run['id']}", headers=h)
         tl = await client.get(f"/repositories/{repo['id']}/metrics/timeline", headers=h)

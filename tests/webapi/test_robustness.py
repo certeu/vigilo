@@ -23,7 +23,7 @@ class _FailingEngine:
 
 
 class TestStartFailure:
-    async def test_failed_start_marks_run_failed_not_500(self, client, user_token, settle):
+    async def test_failed_start_marks_run_failed_not_500(self, client, user_token):
         # Swap in an engine that fails to launch.
         client._app.dependency_overrides[get_engine] = lambda: _FailingEngine()
         h = {"Authorization": f"Bearer {user_token}"}
@@ -34,8 +34,7 @@ class TestStartFailure:
         resp = await client.post(f"/jobs/{job['id']}/run", headers=h)
         # graceful: 201 with a failed run + user-facing error, NOT a 500 or stuck queued
         assert resp.status_code == 201, resp.text
-        await settle()  # the engine launch (which fails here) runs after the 201
-        body = (await client.get(f"/runs/{resp.json()['id']}", headers=h)).json()
+        body = resp.json()
         assert body["status"] == "failed"
         assert "Failed to start scan" in (body["error_summary"] or "")
         # report endpoint reports no report (not a broken/partial one)

@@ -53,27 +53,8 @@ def fake_mailer():
 
 
 @pytest.fixture
-def settle():
-    """Await the background engine launches started by POST /jobs/{id}/run.
-
-    The endpoint answers 201 ``queued`` as soon as the run row is committed and
-    launches ``engine.start`` in a background task; tests that assert on the
-    post-launch state (running / failed / finished) call ``await settle()`` first.
-    """
-    async def _settle() -> None:
-        import asyncio
-        from src.webapi import runsvc
-        if runsvc._BACKGROUND_TASKS:
-            await asyncio.gather(*list(runsvc._BACKGROUND_TASKS), return_exceptions=True)
-    return _settle
-
-
-@pytest.fixture
-async def client(engine, session_maker, fake_engine, fake_mailer, monkeypatch):
-    from src.webapi import runsvc
+async def client(engine, session_maker, fake_engine, fake_mailer):
     from src.webapi.app import create_app
-    # The background launch opens its own session: point it at the test database.
-    monkeypatch.setattr(runsvc, "_session_maker", lambda: session_maker)
     from src.webapi.engine.provider import get_engine
     from src.webapi.mailer_provider import get_mailer
 

@@ -6,17 +6,12 @@ recurring schedules — so every trigger path creates and admits runs identicall
 from __future__ import annotations
 
 import asyncio
-import logging
-
-logger = logging.getLogger(__name__)
-_BACKGROUND_TASKS: set[asyncio.Task] = set()
 import os
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.webapi.db import _session_maker
 
 # Serializes the admission-control window (count active → decide → start) so
 # concurrent run requests can't all pass the cap check at once. Correct for the
@@ -77,18 +72,7 @@ async def create_and_maybe_start(
 
     async with _get_admission_lock():
         if await _active_count(session) < await _effective_cap(session):
-            # Do NOT wait for engine.start (clone/extract can take a while): the run is
-            # already committed as "queued", so the caller (API/UI) can redirect to the
-            # run page right away. The launch continues in a background task.
-            # The run is claimed (queued -> preparing) INSIDE the admission lock: otherwise
-            # it stays "queued" for the whole clone, is not counted by _active_count, and
-            # N simultaneous requests exceed the global concurrency cap.
-            if await _claim_for_launch(session, run):
-                task = asyncio.create_task(
-                    _launch_bg(run.id, engine, job.id, repo.id if repo else None)
-                )
-                _BACKGROUND_TASKS.add(task)
-                task.add_done_callback(_BACKGROUND_TASKS.discard)
+            await _launch(session, engine, run, job, repo)
     await session.refresh(run)
     return run
 
@@ -114,61 +98,11 @@ async def _active_count(session: AsyncSession) -> int:
     )
 
 
-
-
-async def _claim_for_launch(session: AsyncSession, run: Run) -> bool:
-    """Atomically transition a run from queued to preparing (False if already claimed).
-
-    The ORM only flushes the new status after engine.start() returns, which can take
-    minutes of cloning. Claiming up front makes the run visible to the concurrency cap
-    and stops a concurrent drain_queue tick from launching it a second time.
-    """
-    started = datetime.now(timezone.utc)
-    res = await session.execute(
-        update(Run)
-        .where(Run.id == run.id, Run.status == RUN_QUEUED)
-        .values(status=RUN_PREPARING, started_at=started)
-    )
-    await session.commit()
-    if res.rowcount == 0:
-        logger.info("run %s already claimed by another launcher, skipping", run.id)
-        return False
-    run.status = RUN_PREPARING
-    run.started_at = started
-    return True
-
-
-async def _launch_bg(run_id: uuid.UUID, engine: ExecutionEngine, job_id: uuid.UUID,
-                     repo_id: uuid.UUID | None) -> None:
-    """Start a run via the engine in a DEDICATED session (the request's session is
-    closed by the time this background task runs). A launch failure must NOT leave
-    the run stuck 'queued' — mark it failed with a user-facing summary."""
-    async with _session_maker()() as session:
-        run = await session.get(Run, run_id)
-        if run is None:
-            return
-        job = await session.get(Job, job_id)
-        repo = await session.get(Repository, repo_id) if repo_id else None
-        # Normally already claimed (preparing) by create_and_maybe_start under the
-        # admission lock; a still-queued run (direct caller) is claimed here.
-        if run.status == RUN_QUEUED and not await _claim_for_launch(session, run):
-            return
-        if run.status != RUN_PREPARING:
-            return  # cancelled/finished in the meantime
-        try:
-            await engine.start(run, job, repo)
-        except Exception as exc:
-            logger.warning("engine.start failed for run %s: %s", run.id, exc)
-            run.status = RUN_FAILED
-            run.finished_at = datetime.now(timezone.utc)
-            run.error_summary = f"Failed to start scan: {str(exc)[:400]}"
-            from src.webapi.secret_store import revoke
-            await revoke(session, run.id)
-        await session.commit()
-
-
 async def _launch(session: AsyncSession, engine: ExecutionEngine, run: Run,
                   job: Job, repo: Repository | None) -> None:
+    """Start a run via the engine. A launch failure (bad clone URL, missing token,
+    Docker error, …) must NOT leave the run stuck 'queued' or 500 the caller — mark
+    it failed with a user-facing summary and finish cleanly."""
     run.started_at = datetime.now(timezone.utc)
     try:
         await engine.start(run, job, repo)
@@ -178,7 +112,7 @@ async def _launch(session: AsyncSession, engine: ExecutionEngine, run: Run,
         run.finished_at = datetime.now(timezone.utc)
         run.error_summary = f"Failed to start scan: {str(exc)[:400]}"
         from src.webapi.secret_store import revoke
-        await revoke(session, run.id)
+        await revoke(session, run.id)  # never leave a secret behind a run that never ran
     await session.commit()
 
 
