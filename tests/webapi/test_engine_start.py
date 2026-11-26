@@ -25,7 +25,7 @@ def _run(tmp_path) -> SimpleNamespace:
     return SimpleNamespace(
         id=uuid.uuid4(), session_id="sess-abc123", workflow_id=None, task_queue=None,
         container_id=None, status="queued", current_phase=None, commit_sha=None,
-        data_dir=str(tmp_path / "run"),
+        data_dir=str(tmp_path / "run"), finished_at=None,
     )
 
 

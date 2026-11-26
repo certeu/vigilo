@@ -1,9 +1,12 @@
-"""Health/version endpoints (unauthenticated)."""
+"""Health/version endpoints (unauthenticated) and the authenticated trace-rail metadata
+(it reveals internal pipeline stage/agent names, so it is not public)."""
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from src.webapi.auth.deps import current_active_user
 
 router = APIRouter(tags=["system"])
 
@@ -22,7 +25,7 @@ async def get_version() -> dict[str, str]:
     return {"version": v}
 
 
-@router.get("/pipeline/trace-rail")
+@router.get("/pipeline/trace-rail", dependencies=[Depends(current_active_user)])
 async def get_trace_rail() -> dict:
     """Canonical rail steps + pipeline phase/agent → step mapping for the UI.
 

@@ -304,3 +304,8 @@ class Schedule(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )
+
+
+# Grey-box web platform tables. Imported here so create_all and the
+# 0003 reconcile see them; that module imports only src.webapi.db (no cycle).
+import src.greybox_web.models  # noqa: E402,F401

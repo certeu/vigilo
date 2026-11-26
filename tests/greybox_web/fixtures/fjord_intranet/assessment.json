@@ -1,0 +1,11 @@
+{
+  "name": "Fjord Intranet",
+  "mode": "web",
+  "port": 18645,
+  "objective": "Assess the Fjord Intranet employee web application for security weaknesses. Use the provided test accounts to cover authenticated functionality, verify any suspected issue with evidence before reporting it, and do not perform destructive or denial-of-service actions.",
+  "accounts": [
+    {"label": "sofia", "user": "sofia", "password": "Fjord-Sofia-7q!Lantern-2025"},
+    {"label": "jonas", "user": "jonas", "password": "Fjord-Jonas-3x!Harbour-2025"}
+  ],
+  "health_path": "/healthz"
+}

@@ -27,7 +27,7 @@ class ModesOverview(Scene):
         wb, wbox = mode_panel(-5.2, "White-box", "Source code review",
             [("Source code", "static analysis"), ("Running app", "dynamic proof")],
             ("Report + patches", "evidence, fix branch per confirmed finding"))
-        gb, gbox = mode_panel(5.2, "Grey-box", "Penetration testing",
+        gb, gbox = mode_panel(5.2, "Grey-box", "Running-app assessment",
             [("Running app", "no source code"), ("Credentials", "one or more identities")],
             ("Report + detection hints", "WAF rules, log signatures, SIEM queries"))
         yb = 3.75

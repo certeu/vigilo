@@ -1,0 +1,7 @@
+{
+  "name": "Atlas Repository",
+  "mode": "artifact",
+  "anchor_url": "http://127.0.0.1/",
+  "artifact_dir": "artifact",
+  "objective": "Assess this uploaded repository offline for security-relevant configuration, dependencies, source-code properties, and sensitive data. Report only demonstrated weaknesses with evidence from the artifact."
+}

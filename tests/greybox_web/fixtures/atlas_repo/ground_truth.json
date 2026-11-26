@@ -1,0 +1,8 @@
+{
+  "fixture": "atlas_repo",
+  "mode": "artifact",
+  "seeded": [{"id":"R1","title":"Production credential committed in deployment configuration","where":"artifact:config/deploy.env","match":{"location_regex":"artifact:config/deploy\\.env","text_regex":"(?i)password|secret|credential|committed"}}],
+  "negative_controls": [{"id":"NC1","where":"artifact:config/example.env","false_positive_if":{"location_regex":"artifact:config/example\\.env","text_regex":"(?i)password|secret|credential"}}],
+  "expected_observations": ["Repository inventory includes Python and Node package manifests.", "No network requests are made."],
+  "fp_policy": {"unmatched_allowed_classes":["informational","hardening"]}
+}

@@ -1,11 +1,12 @@
 """Repository ingestion status: validate_upload + the upload endpoint's importing state."""
 import io
 import os
+import tarfile
 import zipfile
 
 import pytest
 
-from src.webapi.ingestion import validate_upload
+from src.webapi.ingestion import archive_kind, extract_archive, validate_upload
 from tests.webapi.conftest import _make_user, _token
 
 PW = "Passw0rd!123"
@@ -17,6 +18,59 @@ def _zip_bytes(files: dict[str, str]) -> bytes:
         for name, content in files.items():
             zf.writestr(name, content)
     return buf.getvalue()
+
+
+def _tar_bytes(files: dict[str, str], mode: str = "w:gz") -> bytes:
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode=mode) as tf:
+        for name, content in files.items():
+            data = content.encode()
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            tf.addfile(info, io.BytesIO(data))
+    return buf.getvalue()
+
+
+class TestArchiveDetectedByContent:
+    """Uploads are stored as ``<repo id>.zip`` whatever their format: a .tar.gz the UI
+    accepts used to fail with "not a valid .zip archive"."""
+
+    @pytest.mark.parametrize("mode", ["w:gz", "w"])
+    def test_tar_stored_under_a_zip_name_is_validated(self, tmp_path, mode):
+        p = tmp_path / "repo-id.zip"
+        p.write_bytes(_tar_bytes({"app/main.py": "print(1)\n", "app/util.py": "x=1\n"}, mode))
+        assert archive_kind(str(p)) == "tar"
+        assert validate_upload(str(p)) == 2
+
+    def test_tar_stored_under_a_zip_name_is_extracted(self, tmp_path):
+        p = tmp_path / "repo-id.zip"
+        p.write_bytes(_tar_bytes({"proj/main.py": "print(1)\n", "proj/sub/b.py": "b\n"}))
+        out = extract_archive(str(p), str(tmp_path / "out"))
+        assert sorted(os.path.relpath(os.path.join(r, f), out)
+                      for r, _d, fs in os.walk(out) for f in fs) == ["main.py", "sub/b.py"]
+
+    def test_unsafe_tar_member_is_refused(self, tmp_path):
+        p = tmp_path / "repo-id.zip"
+        p.write_bytes(_tar_bytes({"../../escape.txt": "x\n"}))
+        with pytest.raises(Exception):
+            extract_archive(str(p), str(tmp_path / "out"))
+        assert not (tmp_path / "escape.txt").exists()
+
+    def test_macos_tar_sidecars_are_not_extracted(self, tmp_path):
+        """A Mac's tar adds a "._name" AppleDouble file next to every file (and one
+        for the wrapper dir); they are not source and must not hide the wrapper."""
+        p = tmp_path / "repo-id.zip"
+        p.write_bytes(_tar_bytes({"._proj": "x", "proj/main.py": "print(1)\n",
+                                  "proj/._main.py": "x", "proj/sub/b.py": "b\n",
+                                  "proj/sub/._b.py": "x"}))
+        out = extract_archive(str(p), str(tmp_path / "out"))
+        assert sorted(os.path.relpath(os.path.join(r, f), out)
+                      for r, _d, fs in os.walk(out) for f in fs) == ["main.py", "sub/b.py"]
+
+    def test_zip_is_still_a_zip(self, tmp_path):
+        p = tmp_path / "repo-id.zip"
+        p.write_bytes(_zip_bytes({"main.py": "x\n"}))
+        assert archive_kind(str(p)) == "zip"
 
 
 class TestValidateUpload:

@@ -1,0 +1,12 @@
+{
+  "name": "Lumen Boards",
+  "mode": "web",
+  "port": 18641,
+  "objective": "Assess the Lumen Boards web application for security weaknesses. Lumen Boards is a project-board web app where teams organise work in workspaces, boards and cards. Use the provided test accounts to explore the application as its users would, and report confirmed findings with evidence.",
+  "accounts": [
+    {"label": "maya", "user": "maya@lumen.test", "password": "Maya-Lumen-7Qx!2026"},
+    {"label": "leo", "user": "leo@lumen.test", "password": "Leo-Lumen-4Vt!2026"},
+    {"label": "iris", "user": "iris@lumen.test", "password": "Iris-Lumen-9Kp!2026"}
+  ],
+  "health_path": "/"
+}

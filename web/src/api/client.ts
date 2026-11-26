@@ -11,7 +11,7 @@ export function setToken(t: string | null): void {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   const token = getToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -20,23 +20,59 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const resp = await fetch(`/api${path}`, { ...init, headers });
   if (resp.status === 401) {
     setToken(null);
-    throw new ApiError(401, "Unauthorized");
+    throw new ApiError(401, "Session expired, please log in again");
+  }
+  // Read the body once: a non-JSON body (HTML error page, empty 502 from a
+  // proxy) must never surface as "Unexpected token '<' ... is not valid JSON".
+  const raw = await resp.text();
+  let data: unknown = undefined;
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = undefined;
+    }
   }
   if (!resp.ok) {
-    let detail = resp.statusText;
-    try {
-      detail = (await resp.json()).detail ?? detail;
-    } catch {
-      /* ignore */
-    }
-    throw new ApiError(resp.status, String(detail));
+    // Rich error for the UI (422 lists, 409 {detail, run_id}) from the body read
+    // once above; non-JSON error bodies get a plain "HTTP <status>" message.
+    const body = data ?? null;
+    const detail: unknown =
+      (data as { detail?: unknown } | undefined)?.detail ??
+      (raw ? `HTTP ${resp.status} ${resp.statusText}`.trim() : resp.statusText);
+    throw new ApiError(resp.status, detailMessage(detail), detail, body);
   }
-  if (resp.status === 204) return undefined as T;
-  return (await resp.json()) as T;
+  if (resp.status === 204 || !raw) return undefined as T;
+  if (data === undefined) {
+    // 2xx but not JSON (e.g. a proxy serving index.html): report it instead of
+    // handing `undefined` to a page that expects data.
+    throw new ApiError(resp.status, "Unexpected response from the server");
+  }
+  return data as T;
+}
+
+// FastAPI 422 bodies carry `detail` as a list of {loc, msg, type}; render them as a
+// readable sentence instead of "[object Object]". The raw value stays on the error
+// (`detail`, `body`) for forms that map `loc` to field-level messages.
+function detailMessage(detail: unknown): string {
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((d) => (d && typeof d === "object" && "msg" in d ? String((d as { msg: unknown }).msg) : ""))
+      .filter(Boolean);
+    if (msgs.length) return msgs.join("; ");
+  }
+  return String(detail);
 }
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(
+    public status: number,
+    message: string,
+    /** Raw `detail` from the response body (string, or a 422 list), if any. */
+    public detail: unknown = message,
+    /** Full parsed JSON body, if any (e.g. 409 `{detail, run_id}`). */
+    public body: unknown = null,
+  ) {
     super(message);
   }
 }
@@ -227,6 +263,9 @@ export const api = {
       method: "POST", body: JSON.stringify({ ids }),
     }),
   credentials: () => request<Credential[]>("/credentials"),
+  createCredential: (body: { kind: string; label: string; secret: string; gitlab_base_url?: string | null }) =>
+    request<Credential>("/credentials", { method: "POST", body: JSON.stringify(body) }),
+  deleteCredential: (id: string) => request<void>(`/credentials/${id}`, { method: "DELETE" }),
   jobs: () => request<Job[]>("/jobs"),
   deleteJob: (id: string) => request<void>(`/jobs/${id}`, { method: "DELETE" }),
   patchJob: (id: string, body: Record<string, unknown>) =>
