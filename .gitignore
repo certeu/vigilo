@@ -118,6 +118,7 @@ prompts/pipeline-testing/
 .continue/
 .windsurf/
 .aider*
+web/tsconfig.tsbuildinfo
 
 # Local notes and assistant files, not part of this repository.
 /AGENTS.md

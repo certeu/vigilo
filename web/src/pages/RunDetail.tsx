@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api, getToken, type Job, type Run, type TraceRailConfig } from "../api/client";
 import { TraceRail, type RailPhase } from "../components/TraceRail";
 import { StatusDot } from "../components/StatusDot";
+import { ReportImage } from "../components/ReportImage";
 import { statusLabel } from "../lib/status";
+import { ReportDownloadMenu, type ReportFormat } from "../components/ReportDownloadMenu";
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
 
@@ -99,6 +101,17 @@ export function RunDetail() {
   const [selectedPhase, setSelectedPhase] = useState<string | null>(null);
   const [report, setReport] = useState<string | null>(null);
   const [artifacts, setArtifacts] = useState<string[]>([]);
+
+  // Report <img>s go through ReportImage (authenticated fetch -> blob URL).
+  // Memoised so the renderer keeps its identity and images aren't refetched.
+  const markdownComponents = useMemo<Components>(
+    () => ({
+      img: ({ src, alt, title }) => (
+        <ReportImage runId={id ?? ""} src={typeof src === "string" ? src : undefined} alt={alt} title={title} />
+      ),
+    }),
+    [id],
+  );
   const [error, setError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [rail, setRail] = useState<TraceRailConfig | null>(null);
@@ -205,6 +218,35 @@ export function RunDetail() {
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
     if (nearBottom) el.scrollTop = el.scrollHeight;
   }, [shownLines]);
+
+  async function downloadReport(format: ReportFormat) {
+    const ext = format === "markdown" ? "md" : format;
+    const resp = await fetch(`/api/runs/${id}/report/export/${format === "markdown" ? "markdown" : format}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    }).catch(() => null);
+    if (!resp || !resp.ok) {
+      // markdown is a stored artifact; docx/pdf are rendered server-side
+      if (format === "markdown") {
+        const r2 = await fetch(`/api/runs/${id}/artifacts/report_md`, { headers: { Authorization: `Bearer ${getToken()}` } });
+        if (!r2.ok) { setDownloadError(`Download failed (${r2.status})`); return; }
+        const blob = await r2.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a"); a.href = url; a.download = `vigilo-report-${id?.slice(0, 8)}.md`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 10_000);
+        return;
+      }
+      setDownloadError(`Download failed (${resp?.status ?? "network"})`);
+      return;
+    }
+    setDownloadError(null);
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `vigilo-report-${id?.slice(0, 8)}.${ext}`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  }
 
   async function downloadArtifact(kind: string, filename: string) {
     const resp = await fetch(`/api/runs/${id}/artifacts/${kind}`, {
@@ -347,12 +389,7 @@ export function RunDetail() {
             <div className="flex items-center gap-2">
               {downloadError && <span className="text-xs text-severity-critical">{downloadError}</span>}
               {artifacts.includes("bundle") && (
-                <button
-                  className="btn-ghost py-1"
-                  onClick={() => downloadArtifact("bundle", `vigilo-deliverables-${id?.slice(0, 8)}.zip`)}
-                >
-                  Download all (.zip)
-                </button>
+                <ReportDownloadMenu onDownload={downloadReport} />
               )}
               {artifacts.includes("patches") && (
                 <button
@@ -371,7 +408,9 @@ export function RunDetail() {
             </div>
           </div>
           <div className="markdown max-h-[640px] overflow-auto break-words p-6">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{report}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+              {report}
+            </ReactMarkdown>
           </div>
         </section>
       )}

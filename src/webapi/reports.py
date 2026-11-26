@@ -77,6 +77,36 @@ def open_artifact(data_dir: str, session_id: str, kind: str) -> tuple[BinaryIO, 
     return fh, rel, mimetypes.guess_type(rel)[0] or "application/octet-stream"
 
 
+SCREENSHOTS_DIR = "screenshots"
+# Only raster images: SVG/HTML served inline from the API origin could run script.
+REPORT_IMAGE_TYPES: dict[str, str] = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
+
+def open_report_image(data_dir: str, session_id: str, rel: str) -> tuple[BinaryIO, str] | None:
+    """(file object, media type) for a report screenshot such as ``screenshots/x.png``.
+
+    The report references its evidence relatively; only raster images under
+    deliverables/screenshots/ are served, opened via safefs so a symlink planted
+    anywhere in the agent-controlled workspace cannot leak files from outside it.
+    """
+    parts = tuple(p for p in rel.split("/") if p not in ("", "."))
+    if len(parts) < 2 or parts[0] != SCREENSHOTS_DIR:
+        return None
+    media_type = REPORT_IMAGE_TYPES.get(os.path.splitext(parts[-1])[1].lower())
+    if media_type is None:
+        return None
+    fh = open_deliverable(data_dir, session_id, *parts)
+    if fh is None:
+        return None
+    return fh, media_type
+
+
 def available_artifacts(data_dir: str, session_id: str) -> list[str]:
     """Return the kinds whose files currently exist for this run."""
     found: list[str] = []
